@@ -4,47 +4,35 @@
       <!-- Toolbar -->
       <div class="toolbar">
         <div class="tools-left">
-          <button class="tool" @click="noop"><i class="fa-regular fa-circle"></i> Nodo</button>
-          <button class="tool" @click="noop"><i class="fa-solid fa-pen"></i> Texto</button>
-          <button class="tool" @click="noop"><i class="fa-solid fa-eraser"></i> Borrar</button>
+          <button class="tool" :class="{ 'is-active': nodeMode }" @click="toggleNodeMode">
+            <i class="fa-regular fa-circle"></i> Nodo
+          </button>
+          <button class="tool" :class="{ 'is-active': connectMode }" @click="toggleConnectMode">
+            <i class="fa-solid fa-link"></i> Conectar
+          </button>
+          <button class="tool" :class="{ 'is-active': moveMode }" @click="toggleMoveMode">
+            <i class="fa-solid fa-hand"></i> Mover
+          </button>
+          <button class="tool" :class="{ 'is-active': deleteMode }" @click="toggleDeleteMode">
+            <i class="fa-solid fa-eraser"></i> Borrar
+          </button>
+          <button class="tool" :class="{ 'is-active': textMode }" @click="toggleTextMode">
+            <i class="fa-solid fa-pen"></i> Texto
+          </button>
         </div>
 
         <div class="tools-right">
-          <!-- Exportar con dropdown -->
-          <div class="tool--drop" :class="{ 'is-open': openExport }" ref="dropRef">
-            <button
-              class="tool tool-trigger"
-              @click.stop="toggleExport"
-              aria-haspopup="menu"
-              :aria-expanded="openExport ? 'true' : 'false'"
-              title="Exportar"
-            >
-              <i class="fa-solid fa-arrow-up-right-from-square"></i>
-              Exportar
-              <i class="fa fa-chevron-up caret"></i>
-            </button>
-
-            <!-- usa v-if en lugar de v-show -->
-            <ul class="tool-drop" role="menu" v-if="openExport">
-              <li role="menuitem">
-                <button class="drop-item" @click="exportImagen">
-                  <i class="fa-regular fa-image"></i> Exportar imagen
-                </button>
-              </li>
-              <li role="menuitem">
-                <button class="drop-item" @click="exportPDF">
-                  <i class="fa-regular fa-file-pdf"></i> Exportar PDF
-                </button>
-              </li>
-              <li role="menuitem">
-                <button class="drop-item" @click="exportJSON">
-                  <i class="fa-regular fa-file-lines"></i> Exportar JSON
-                </button>
-              </li>
-            </ul>
-          </div>
-
-          <!-- Importar JSON aparte -->
+          <button
+            class="tool tool-trigger"
+            @click="showExport = true"
+            aria-haspopup="dialog"
+            :aria-expanded="showExport ? 'true' : 'false'"
+            title="Exportar"
+            type="button"
+          >
+            <i class="fa-solid fa-arrow-up-right-from-square"></i>
+            Exportar
+          </button>
           <label class="tool file" title="Importar JSON">
             <i class="fa-solid fa-file-import"></i> Importar JSON
             <input type="file" accept="application/json" @change="importJSON" />
@@ -55,18 +43,24 @@
       <!-- Pizarra -->
       <div
         class="board"
+        ref="boardRef"
         :class="[themeClass, { 'no-grid': !showGrid }]"
         :style="boardStyle"
         role="region"
         aria-label="Pizarra de grafos"
       >
-        <button class="fab" @click="showPicker = true" title="Cambiar estilo">
+        <div ref="cyRef" class="graph-layer"></div>
+
+        <button class="fab fab-clear" title="Limpiar pizarra" type="button" @click.stop="confirmClear">
+          <i class="fa-solid fa-broom"></i>
+        </button>
+        <button class="fab" @click.stop="showPicker = true" title="Cambiar estilo" type="button">
           <i class="fa-solid fa-palette"></i>
         </button>
       </div>
     </div>
 
-    <!-- Modal -->
+    <!-- Modales -->
     <EstiloPizarra
       v-model="showPicker"
       :theme="theme"
@@ -74,71 +68,624 @@
       :image="image"
       @confirm="applyTheme"
     />
+    <ExportPopup
+      v-model="showExport"
+      title="Exportar pizarra"
+      @select="handleExport"
+    />
+    <EdgePropsPopup
+      v-model="showEdgeProps"
+      :source-label="edgeCtx.sourceLabel"
+      :target-label="edgeCtx.targetLabel"
+      :loop="edgeCtx.isLoop"
+      :default-weight="edgeCtx.defaultWeight"
+      :initial-dir="edgeCtx.initialDir"
+      @confirm="onEdgePropsConfirm"
+    />
+    <NodeNamePopup
+      v-model="showNodeName"
+      :default-name="nodeNameCtx.defaultName"
+      @confirm="onNodeNameConfirm"
+    />
+
+    <!-- Propiedades del nodo -->
+    <NodePropsPopup
+      v-model="showNodeProps"
+      :default-name="nodePropsCtx.name"
+      :default-color="nodePropsCtx.color"
+      @confirm="onNodePropsConfirm"
+    />
   </section>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import EstiloPizarra from '@/components/EstiloPizarra.vue'
+import ExportPopup from '@/components/ExportPopup.vue'
+import EdgePropsPopup from '@/components/EdgePropsPopup.vue'
+import NodeNamePopup from '@/components/NodeNamePopup.vue'
+import NodePropsPopup from '@/components/NodePropsPopup.vue'
 
-/* Estado pizarra */
+import cytoscape from 'cytoscape'
+import Swal from 'sweetalert2'
+import 'sweetalert2/dist/sweetalert2.min.css'
+
+const cyRef = ref(null)
+const boardRef = ref(null)
+let cy = null
+
+// modos
+const nodeMode = ref(false)
+const connectMode = ref(false)
+const moveMode = ref(false)
+const deleteMode = ref(false)
+const textMode = ref(false)
+let connectFromId = null
+
+let uid = 1
+const nextId = (pfx) => `${pfx}${uid++}`
+
+// doble clic utilitario
+let lastTap = { id: null, t: 0 }
+const isDoubleTap = (id) => {
+  const now = Date.now()
+  const ok = lastTap.id === id && (now - lastTap.t) < 300
+  lastTap = { id, t: now }
+  return ok
+}
+
+const swalColors = { confirmButtonColor: '#567c8d', cancelButtonColor: '#2f4156' }
+
+/* ===== Edge props popup ===== */
+const showEdgeProps = ref(false)
+const edgeCtx = ref({
+  sId: null, tId: null, editId: null, isLoop: false,
+  sourceLabel: '', targetLabel: '', defaultWeight: '1', initialDir: 'forward'
+})
+function openEdgeProps({ sId, tId, editId = null, defaultWeight = '1', initialDir = 'forward' }) {
+  const s = cy.$id(sId); const t = cy.$id(tId)
+  edgeCtx.value = {
+    sId, tId, editId, isLoop: sId === tId,
+    sourceLabel: s?.data('label') || sId,
+    targetLabel: t?.data('label') || tId,
+    defaultWeight: String(defaultWeight ?? '1'),
+    initialDir
+  }
+  showEdgeProps.value = true
+}
+function onEdgePropsConfirm({ weight, dir }) {
+  const { sId, tId, editId, isLoop } = edgeCtx.value
+  if (editId) {
+    const ele = cy.$id(editId)
+    if (!ele.empty()) {
+      if (isLoop || dir === 'forward') ele.data({ weight, source: sId, target: tId })
+      else if (dir === 'reverse')       ele.data({ weight, source: tId, target: sId })
+      else {
+        ele.data({ weight, source: sId, target: tId })
+        const rev = cy.$(`edge[source="${tId}"][target="${sId}"]`)
+        if (rev.empty()) cy.add({ group: 'edges', data: { id: `e_${tId}_${sId}_${Date.now()}`, source: tId, target: sId, weight } })
+        else rev.data('weight', weight)
+      }
+    }
+  } else {
+    if (isLoop || dir === 'forward') ensureEdge(sId, tId, weight)
+    else if (dir === 'reverse')      ensureEdge(tId, sId, weight)
+    else { ensureEdge(sId, tId, weight); ensureEdge(tId, sId, weight) }
+  }
+  showEdgeProps.value = false
+}
+
+/* ===== Node name popup (crear) ===== */
+const showNodeName = ref(false)
+const nodeNameCtx = ref({ mode:'create', position:null, nodeId:null, defaultName:'Nodo' })
+function openNodeNameForCreate(position, defaultName='Nodo'){
+  nodeNameCtx.value = { mode:'create', position, nodeId:null, defaultName }
+  showNodeName.value = true
+}
+function openNodeNameForEdit(nodeId, defaultName){
+  nodeNameCtx.value = { mode:'edit', nodeId, position:null, defaultName: defaultName||'Nodo' }
+  showNodeName.value = true
+}
+function onNodeNameConfirm(name){
+  const { mode, position, nodeId } = nodeNameCtx.value
+  if (mode==='create' && position){
+    const base = '#57c3d1'
+    const id = nextId('n')
+    cy.add({ group:'nodes', data:{ id, label:name, color:base, borderColor: darkenColor(base, 28) }, position })
+  } else if (mode==='edit' && nodeId){
+    cy.$id(nodeId).data('label', name)
+  }
+  showNodeName.value = false
+}
+
+/* ===== Node props popup (editar) ===== */
+const showNodeProps = ref(false)
+const nodePropsCtx = ref({ nodeId:null, name:'', color:'#57c3d1' })
+function openNodeProps(node){
+  nodePropsCtx.value = { nodeId: node.id(), name: node.data('label') || '', color: node.data('color') || '#57c3d1' }
+  showNodeProps.value = true
+}
+function onNodePropsConfirm({ name, color }){
+  const { nodeId } = nodePropsCtx.value
+  const n = cy.$id(nodeId)
+  if (n.empty()) return
+  if (name !== undefined) n.data('label', (name || '').trim())
+  if (color){ n.data({ color, borderColor: darkenColor(color, 28) }) }
+  showNodeProps.value = false
+}
+
+/* ---------------------------------------- */
+
+onMounted(() => {
+  cy = cytoscape({
+    container: cyRef.value,
+    layout: { name:'preset' },
+    wheelSensitivity: 0.25, minZoom:0.1, maxZoom:3,
+    style: [
+      // Nodos regulares con color por data()
+      { selector:'node', style:{
+        'shape':'ellipse', 'width':56, 'height':56,
+        'background-color':'data(color)',
+        'border-width':2, 'border-color':'data(borderColor)',
+        'label':'data(label)', 'color':'#0f1120', 'font-weight':700, 'font-size':12,
+        'text-valign':'center','text-halign':'center','text-wrap':'wrap','text-max-width':52,
+        'outline-width':0, 'overlay-opacity':0
+      }},
+      // Bloques de texto
+      { selector:'node.text-block', style:{
+        'shape':'round-rectangle','width':28,'height':20,'background-opacity':0,'border-width':0,
+        'label':'data(text)','color':'#e7e7ec','font-size':13,'font-weight':600,'text-wrap':'wrap','text-max-width':220,
+        'text-halign':'center','text-valign':'center','text-background-color':'#2c2f3a','text-background-opacity':0.85,'text-background-padding':6,'text-background-shape':'roundrectangle'
+      }},
+      { selector:'node:selected', style:{ 'border-color':'#ffffff', 'overlay-color':'#ffffff', 'overlay-opacity':0.18, 'overlay-padding':6 }},
+      { selector:'node.edge-pending', style:{ 'overlay-color':'#567c8d', 'overlay-opacity':0.25, 'overlay-padding':8 }},
+      // Aristas
+      { selector:'edge', style:{
+        'width':2, 'line-color':'#000000','target-arrow-color':'#000000','target-arrow-shape':'triangle',
+        'curve-style':'bezier','label':'data(weight)','text-background-color':'#2c2f3a','text-background-opacity':0.85,'text-background-padding':2,'text-rotation':'autorotate','font-size':12,'color':'#ffffff'
+      }},
+      { selector:'edge:selected', style:{ 'line-color':'#000000','target-arrow-color':'#000000','width':3 }}
+    ]
+  })
+
+  // Clic en fondo: crear nodo / texto
+  cy.on('tap', (evt) => {
+    if (evt.target !== cy) return
+    if (nodeMode.value){ openNodeNameForCreate(evt.position, 'Nodo'); return }
+    if (textMode.value){ return addTextAt(evt.position) }
+    if (connectMode.value && connectFromId) clearPendingConnect()
+  })
+
+  // Tap sobre elementos
+  cy.on('tap', 'node,edge', async (evt) => {
+    const ele = evt.target
+
+    // BORRAR (detecta tipo)
+    if (deleteMode.value) {
+      const isEdge = ele.isEdge()
+      const isText = ele.isNode() && ele.hasClass('text-block')
+      const isGraphNode = ele.isNode() && !isText
+      const tipo = isEdge ? 'arista' : (isText ? 'texto' : 'nodo')
+      const detalle = isGraphNode ? 'Se eliminarán también sus aristas asociadas.' : (isText ? 'Se eliminará el bloque de texto.' : '')
+      const nombre = isText ? (ele.data('text')?.toString().slice(0,40)||'Texto') : isGraphNode ? (ele.data('label')||'Nodo') : ''
+      const { isConfirmed } = await Swal.fire({
+        title: `¿Eliminar ${tipo}?`,
+        text: nombre ? `${detalle ? detalle + ' ' : ''}(${nombre})` : detalle,
+        icon: 'warning', showCancelButton: true, showCloseButton: true,
+        confirmButtonText: 'Sí, eliminar', cancelButtonText: 'Cancelar', ...swalColors,
+      })
+      if (isConfirmed) cy.remove(ele)
+      return
+    }
+
+    // CONECTAR / editar aristas
+    if (connectMode.value) {
+      if (ele.isEdge() && isDoubleTap(ele.id())) {
+        const sId = ele.source().id(), tId = ele.target().id()
+        openEdgeProps({ sId, tId, editId: ele.id(), defaultWeight: ele.data('weight')??'1', initialDir:'forward' })
+        return
+      }
+      if (ele.isNode() && !ele.hasClass('text-block')) {
+        const clickedId = ele.id()
+        if (!connectFromId){ connectFromId = clickedId; cy.$id(clickedId).addClass('edge-pending') }
+        else {
+          const sId = connectFromId, tId = clickedId
+          cy.$id(sId).removeClass('edge-pending'); connectFromId = null
+          openEdgeProps({ sId, tId, defaultWeight:'1', initialDir:'forward' })
+        }
+      }
+      return
+    }
+
+    // CLICK en nodo normal => abrir propiedades (nombre + color)
+    if (ele.isNode() && !ele.hasClass('text-block')) {
+      openNodeProps(ele)
+      return
+    }
+
+    // DOBLE CLIC en bloque de texto => editar texto
+    if (ele.isNode() && ele.hasClass('text-block') && isDoubleTap(ele.id())) {
+      await editTextNode(ele)
+    }
+
+    // DOBLE CLIC en arista (fuera de conectar) => propiedades
+    if (ele.isEdge() && isDoubleTap(ele.id())) {
+      const sId = ele.source().id(), tId = ele.target().id()
+      openEdgeProps({ sId, tId, editId: ele.id(), defaultWeight: ele.data('weight')??'1', initialDir:'forward' })
+    }
+  })
+
+  // ESC
+  const onKey = (e) => {
+    if (e.key === 'Escape') {
+      nodeMode.value = connectMode.value = deleteMode.value = moveMode.value = textMode.value = false
+      clearPendingConnect(); applyGrabRules()
+    }
+  }
+  window.addEventListener('keydown', onKey)
+  onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
+
+  applyGrabRules()
+})
+
+onBeforeUnmount(() => { cy?.destroy() })
+
+/* Helpers */
+function ensureEdge(source, target, weight){
+  const existing = cy.$(`edge[source="${source}"][target="${target}"]`)
+  if (existing.empty()) cy.add({ group:'edges', data:{ id:`e_${source}_${target}_${Date.now()}`, source, target, weight } })
+  else existing.data('weight', weight)
+}
+function clearPendingConnect(){ if (connectFromId){ cy.$id(connectFromId).removeClass('edge-pending'); connectFromId = null } }
+
+async function addTextAt(position){
+  const { isConfirmed, value } = await Swal.fire({
+    title:'Texto', input:'textarea', inputLabel:'Contenido', inputPlaceholder:'Escribe aquí…',
+    showCancelButton:true, showCloseButton:true, confirmButtonText:'Agregar', cancelButtonText:'Cancelar', ...swalColors
+  })
+  if (isConfirmed){
+    const text = (value??'').toString().trim()
+    if (text){ const id = nextId('t'); cy.add({ group:'nodes', data:{ id, text }, position, classes:'text-block' }) }
+  }
+}
+async function editTextNode(ele){
+  const { isConfirmed, value } = await Swal.fire({
+    title:'Editar texto', input:'textarea', inputValue: ele.data('text')||'',
+    showCancelButton:true, showCloseButton:true, confirmButtonText:'Guardar', cancelButtonText:'Cancelar', ...swalColors
+  })
+  if (isConfirmed) ele.data('text', (value??'').toString().trim())
+}
+
+/* color util */
+function darkenColor(hex, percent=25){
+  try{
+    const h = hex.replace('#','')
+    const bigint = parseInt(h.length===3 ? h.split('').map(x=>x+x).join('') : h, 16)
+    let r = (bigint>>16)&255, g=(bigint>>8)&255, b=bigint&255
+    const p = Math.min(Math.max(percent,0),100)/100
+    r = Math.round(r*(1-p)); g = Math.round(g*(1-p)); b = Math.round(b*(1-p))
+    const toHex = (n)=> n.toString(16).padStart(2,'0')
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`
+  }catch{ return '#167293' }
+}
+
+/* ===== estado existente ===== */
 const theme = ref('grid')
 const color = ref('#fff7ef')
 const image = ref('')
 const showGrid = ref(true)
 const showPicker = ref(false)
+const showExport = ref(false)
 const themeClass = computed(() => `theme-${theme.value}`)
-
-const boardStyle = computed(() => ({
-  '--board-bg': color.value,
-  '--board-image': image.value ? `url("${image.value}")` : 'none',
-}))
-
-const applyTheme = ({ theme: t, color: c, image: img }) => {
-  if (t === 'image' && !img) {
-    theme.value = 'plain'
-    color.value = '#ffffff'
-    image.value = ''
-    return
-  }
-  theme.value = t
-  if (c) color.value = c
-  image.value = img || ''
-}
-
+const boardStyle = computed(() => ({ '--board-bg': color.value, '--board-image': image.value ? `url("${image.value}")` : 'none' }))
+const applyTheme = ({ theme: t, color: c, image: img }) => { if (t === 'image' && !img) { theme.value='plain'; color.value='#ffffff'; image.value=''; return } theme.value=t; if (c) color.value=c; image.value=img||'' }
 const toggleGrid = () => (showGrid.value = !showGrid.value)
 const noop = () => {}
 
-/* Dropdown Exportar */
-const openExport = ref(false)
-const dropRef = ref(null)
+/* ===================== EXPORT / IMPORT ===================== */
+function getBoardBg(){ return color.value || '#ffffff' }
 
-const toggleExport = () => (openExport.value = !openExport.value)
-
-const onClickOutside = (e) => {
-  // si se hace clic fuera, cerrar
-  if (!dropRef.value) return
-  if (!dropRef.value.contains(e.target)) openExport.value = false
+function dataURLtoBlob(dataUrl){
+  const arr = dataUrl.split(',')
+  const mime = arr[0].match(/:(.*?);/)[1]
+  const bstr = atob(arr[1])
+  let n = bstr.length
+  const u8arr = new Uint8Array(n)
+  while (n--) u8arr[n] = bstr.charCodeAt(n)
+  return new Blob([u8arr], { type: mime })
 }
-const onKey = (e) => { if (e.key === 'Escape') openExport.value = false }
+function downloadBlob(filename, blob){
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = filename
+  document.body.appendChild(a); a.click(); a.remove()
+  URL.revokeObjectURL(url)
+}
+async function cyPngBlob(opts = {}){
+  try{
+    return await cy.png({ output:'blob-promise', full:true, scale: opts.scale ?? 2, bg: opts.bg ?? getBoardBg() })
+  }catch(e){
+    const dataUrl = cy.png({ full:true, scale: opts.scale ?? 2, bg: opts.bg ?? getBoardBg() })
+    return dataURLtoBlob(dataUrl)
+  }
+}
 
-onMounted(() => {
-  document.addEventListener('click', onClickOutside, true)  // captura para cerrar antes
-  document.addEventListener('keydown', onKey)
-})
-onBeforeUnmount(() => {
-  document.removeEventListener('click', onClickOutside, true)
-  document.removeEventListener('keydown', onKey)
-})
+/** Captura la pizarra completa (fondo + grafo) con html2canvas si está disponible */
+async function captureBoardCanvas(scale = 2){
+  let html2canvas
+  try {
+    const mod = await import('html2canvas')
+    html2canvas = mod.default || mod
+  } catch (_) {
+    return null // no instalado
+  }
+  const boardEl = boardRef.value
+  if (!boardEl) return null
 
-/* Acciones (stubs) */
-const exportImagen = () => { openExport.value = false; noop() }
-const exportPDF   = () => { openExport.value = false; noop() }
-const exportJSON  = () => { openExport.value = false; noop() }
-const importJSON  = () => { noop() }
+  // Ocultar FABs temporalmente para que no salgan en la captura
+  const fabs = Array.from(boardEl.querySelectorAll('.fab'))
+  const prev = fabs.map(el => el.style.visibility)
+  fabs.forEach(el => { el.style.visibility = 'hidden' })
+
+  try {
+    const canvas = await html2canvas(boardEl, {
+      useCORS: true,
+      backgroundColor: null, // respeta el CSS de fondo (grid/punteado/imagen)
+      scale
+    })
+    return canvas
+  } finally {
+    // Restaurar
+    fabs.forEach((el, i) => { el.style.visibility = prev[i] || '' })
+  }
+}
+
+async function exportImagen(){
+  // Primero intentamos html2canvas para incluir EL FONDO
+  const canvas = await captureBoardCanvas(2)
+  if (canvas){
+    // toBlob para mejor calidad
+    const blob = await new Promise(resolve => canvas.toBlob(b => resolve(b), 'image/png'))
+    const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')
+    downloadBlob(`grafos-${stamp}.png`, blob)
+    return
+  }
+
+  // Fallback: solo el grafo (sin fondo CSS)
+  const { isConfirmed } = await Swal.fire({
+    icon:'info',
+    title:'Exportar imagen',
+    text:'Para incluir el fondo (grilla/punteado) instala "html2canvas". ¿Descargar solo el grafo?',
+    showCancelButton:true, confirmButtonText:'Sí, descargar', cancelButtonText:'Cancelar', ...swalColors
+  })
+  if (!isConfirmed) return
+  try{
+    const blob = await cyPngBlob({ scale: 2 })
+    const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')
+    downloadBlob(`grafos-${stamp}.png`, blob)
+  }catch(e){
+    console.error(e)
+    Swal.fire({ icon:'error', title:'No se pudo exportar la imagen', text:'Ocurrió un error al generar el PNG.', ...swalColors })
+  }
+}
+
+async function exportPDF(){
+  // Intentamos html2canvas + jsPDF para que el PDF también respete el fondo
+  let jsPDFmod = null
+  try { jsPDFmod = await import('jspdf') } catch (_) {}
+
+  const canvas = await captureBoardCanvas(2)
+  if (canvas && jsPDFmod?.jsPDF){
+    try{
+      const { jsPDF } = jsPDFmod
+      const dataUrl = canvas.toDataURL('image/png')
+      const w = canvas.width, h = canvas.height
+      const orientation = w >= h ? 'l' : 'p'
+      const doc = new jsPDF({ orientation, unit:'pt', compress:true })
+      const pageW = doc.internal.pageSize.getWidth()
+      const pageH = doc.internal.pageSize.getHeight()
+      const margin = 24
+      const scale = Math.min((pageW - margin*2)/w, (pageH - margin*2)/h)
+      const imgW = w * scale, imgH = h * scale
+      const x = (pageW - imgW)/2, y = (pageH - imgH)/2
+      doc.addImage(dataUrl, 'PNG', x, y, imgW, imgH)
+      const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')
+      doc.save(`grafos-${stamp}.pdf`)
+      return
+    }catch(e){
+      console.error(e)
+    }
+  }
+
+  // Si falta alguna lib, ofrece alternativas
+  if (!jsPDFmod?.jsPDF || !canvas){
+    const { value } = await Swal.fire({
+      title: 'Exportar PDF',
+      html: `<div style="text-align:left">
+        <p>Para que el PDF incluya el fondo, instala:</p>
+        <pre style="background:#1e2430;color:#e7e7ec;padding:8px;border-radius:8px">npm i html2canvas jspdf</pre>
+        <p>Elige una alternativa ahora:</p>
+      </div>`,
+      input: 'select',
+      inputOptions: {
+        png: 'Descargar PNG (con/sin fondo según librería)',
+        grafo: 'Descargar PNG solo grafo',
+        cancelar: 'Cancelar'
+      },
+      inputValue: 'png',
+      showCancelButton: false,
+      confirmButtonText: 'Continuar',
+      ...swalColors
+    })
+    if (value === 'png') return exportImagen()
+    if (value === 'grafo'){
+      const blob = await cyPngBlob({ scale: 2 })
+      const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')
+      downloadBlob(`grafos-${stamp}.png`, blob)
+    }
+    return
+  }
+}
+
+function serializeGraph(){
+  const nodes = cy.nodes().map(n => ({
+    id: n.id(),
+    label: n.data('label') ?? '',
+    color: n.data('color') ?? '#57c3d1',
+    borderColor: n.data('borderColor') ?? '#167293',
+    text: n.hasClass('text-block') ? (n.data('text') ?? '') : undefined,
+    classes: n.classes(),
+    position: n.position()
+  }))
+  const edges = cy.edges().map(e => ({
+    id: e.id(),
+    source: e.source().id(),
+    target: e.target().id(),
+    weight: e.data('weight') ?? ''
+  }))
+  return {
+    meta: { version: 1, exportedAt: new Date().toISOString() },
+    board: { theme: theme.value, color: color.value, image: image.value, showGrid: showGrid.value },
+    graph: { nodes, edges }
+  }
+}
+
+async function exportJSON(){
+  try{
+    const json = serializeGraph()
+    const blob = new Blob([JSON.stringify(json, null, 2)], { type:'application/json' })
+    const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')
+    downloadBlob(`grafos-${stamp}.json`, blob)
+  }catch(e){
+    console.error(e)
+    Swal.fire({ icon:'error', title:'No se pudo exportar el JSON', text:'Ocurrió un error al serializar el grafo.', ...swalColors })
+  }
+}
+
+function updateUidFromElements(nodes = [], edges = []){
+  let maxNum = uid
+  const rx = /(\d+)$/
+  ;[...nodes, ...edges].forEach(el => {
+    const m = (el.id || '').match(rx)
+    if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10) + 1)
+  })
+  uid = Math.max(uid, maxNum)
+}
+
+function loadFromSerializable(obj){
+  const g = obj?.graph || obj?.elements || obj
+  if (!g) throw new Error('Estructura inválida')
+
+  const nodes = g.nodes || g?.elements?.nodes || []
+  const edges = g.edges || g?.elements?.edges || []
+
+  cy.startBatch()
+  cy.elements().remove()
+
+  if (obj?.board){
+    theme.value = obj.board.theme ?? theme.value
+    color.value = obj.board.color ?? color.value
+    image.value = obj.board.image ?? image.value
+    showGrid.value = obj.board.showGrid ?? showGrid.value
+  }
+
+  nodes.forEach(n => {
+    const data = n.data ? n.data : {
+      id: n.id,
+      label: n.label ?? '',
+      color: n.color ?? '#57c3d1',
+      borderColor: n.borderColor ?? darkenColor(n.color ?? '#57c3d1', 28),
+      text: n.text
+    }
+    const position = n.position || n?.data?.position || n?.pos || { x: 0, y: 0 }
+    const classes = (n.classes || n?.data?.classes || '').toString()
+    cy.add({ group:'nodes', data, position, classes })
+  })
+
+  edges.forEach(e => {
+    const data = e.data ? e.data : {
+      id: e.id ?? `e_${e.source}_${e.target}_${Date.now()}`,
+      source: e.source ?? e?.data?.source,
+      target: e.target ?? e?.data?.target,
+      weight: e.weight ?? e?.data?.weight ?? ''
+    }
+    cy.add({ group:'edges', data })
+  })
+
+  cy.endBatch()
+  cy.fit(undefined, 24)
+  updateUidFromElements(nodes, edges)
+}
+
+async function importJSON(ev){
+  const file = ev?.target?.files?.[0]
+  if (!file) return
+
+  try{
+    const text = await file.text()
+    const obj = JSON.parse(text)
+
+    const { isConfirmed } = await Swal.fire({
+      title:'Importar JSON',
+      text:'Esto reemplazará el contenido actual de la pizarra.',
+      icon:'warning',
+      showCancelButton:true, showCloseButton:true,
+      confirmButtonText:'Importar', cancelButtonText:'Cancelar',
+      ...swalColors
+    })
+    if (!isConfirmed) return
+
+    loadFromSerializable(obj)
+
+    await Swal.fire({ icon:'success', title:'Importación completada', text:'El grafo se cargó correctamente.', confirmButtonText:'OK', ...swalColors })
+    ev.target.value = ''
+  }catch(e){
+    console.error(e)
+    Swal.fire({ icon:'error', title:'Importación fallida', text:'El archivo no tiene el formato esperado o está dañado.', ...swalColors })
+  }
+}
+
+/* Export popup handler */
+const handleExport = async (type) => {
+  if (type === 'image') await exportImagen()
+  else if (type === 'pdf') await exportPDF()
+  else if (type === 'json') await exportJSON()
+  showExport.value = false
+}
+
+/* Toolbar toggles */
+function toggleNodeMode(){ nodeMode.value=!nodeMode.value; if(nodeMode.value){ connectMode.value=deleteMode.value=moveMode.value=textMode.value=false } applyGrabRules() }
+function toggleDeleteMode(){ deleteMode.value=!deleteMode.value; if(deleteMode.value){ nodeMode.value=connectMode.value=moveMode.value=textMode.value=false } applyGrabRules() }
+function toggleConnectMode(){ connectMode.value=!connectMode.value; if(connectMode.value){ nodeMode.value=deleteMode.value=moveMode.value=textMode.value=false } else clearPendingConnect(); applyGrabRules() }
+function toggleMoveMode(){ moveMode.value=!moveMode.value; if(moveMode.value){ nodeMode.value=connectMode.value=deleteMode.value=textMode.value=false } applyGrabRules() }
+function toggleTextMode(){ textMode.value=!textMode.value; if(textMode.value){ nodeMode.value=connectMode.value=deleteMode.value=moveMode.value=false } applyGrabRules() }
+
+/* Arrastre */
+function applyGrabRules(){
+  if(!cy) return
+  const anySpecial = nodeMode.value || connectMode.value || deleteMode.value || textMode.value
+  if (moveMode.value || !anySpecial) cy.nodes().grabify()
+  else cy.nodes().ungrabify()
+}
+
+/* Limpiar */
+async function confirmClear(e){
+  e?.stopPropagation?.()
+  const { isConfirmed } = await Swal.fire({
+    title:'Limpiar pizarra', text:'Esto eliminará todos los nodos y aristas.',
+    icon:'warning', showCancelButton:true, showCloseButton:true,
+    confirmButtonText:'Limpiar', cancelButtonText:'Cancelar', ...swalColors
+  })
+  if (isConfirmed){
+    cy?.elements().remove(); clearPendingConnect()
+    nodeMode.value = connectMode.value = deleteMode.value = moveMode.value = textMode.value = false
+    applyGrabRules()
+  }
+}
 </script>
 
 <style scoped lang="scss">
+/* No cambié tu CSS existente de la pizarra */
 $navbar-height: 72px;
 $wrap-max: 1200px;
 
@@ -153,7 +700,6 @@ $shadow: 0 10px 24px rgba(0,0,0,.25);
 .toolbar {
   background: $panel-bg; border: 1px solid $panel-border; border-radius: 12px; padding: 8px;
   display: flex; align-items: center; justify-content: space-between; box-shadow: $shadow; backdrop-filter: blur(6px); color: #e7e7ec;
-  overflow: visible; /* 🔧 permite que el dropdown “se salga” */
 
   .tools-left, .tools-right { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
@@ -167,43 +713,7 @@ $shadow: 0 10px 24px rgba(0,0,0,.25);
     &:hover { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.18); }
     &:active { transform: translateY(1px); }
     &.file { position: relative; input[type="file"]{ position:absolute; inset:0; opacity:0; cursor:pointer; } }
-  }
-
-  /* Botón con dropdown */
-  .tool--drop {
-    position: relative; z-index: 30; /* por encima de otros elementos */
-
-    .tool-trigger {
-      .caret { margin-left: 8px; transition: transform .25s ease; }
-    }
-    &.is-open .caret { transform: rotate(180deg); }
-
-    .tool-drop {
-      position: absolute; top: calc(100% + 8px); right: 0;
-      z-index: 999; /* 🔧 bien arriba */
-      display: block;
-      background: rgba(0,0,0,0.7);
-      color: white;
-      border: 1px solid rgba(255,255,255,0.2);
-      border-radius: 10px;
-      padding: 6px;
-      min-width: 220px;
-      backdrop-filter: blur(6px);
-      box-shadow: 0 12px 28px rgba(0,0,0,.35);
-
-      li { list-style: none; }
-
-      .drop-item {
-        width: 100%;
-        display: flex; align-items: center; gap: 10px;
-        background: transparent; color: white;
-        border: none; border-radius: 8px;
-        padding: 10px 12px; text-align: left; cursor: pointer;
-        transition: background .15s ease;
-        i { width: 18px; text-align: center; }
-        &:hover { background: rgba(255,255,255,0.12); }
-      }
-    }
+    &.is-active { background:#567c8d !important; color:#ecebe6; border-color: rgba(255,255,255,.28); }
   }
 }
 
@@ -216,29 +726,20 @@ $shadow: 0 10px 24px rgba(0,0,0,.25);
     linear-gradient(to bottom, rgba(0,0,0,.05) 1px, transparent 1px);
   background-size: 16px 16px;
 
+  .fab { position:absolute; right:14px; bottom:14px; width:44px; height:44px; border-radius:999px; border:none; background:#567c8d; color:#ecebe6; display:grid; place-items:center; cursor:pointer; box-shadow:0 8px 22px rgba(0,0,0,.35); transition: transform .06s, filter .2s; &:hover{filter:brightness(1.05)} &:active{ transform: translateY(1px); } z-index:20; pointer-events:auto; }
+  .fab-clear{ bottom:68px; background:#2f4156; z-index:25; }
   &.no-grid { background-image: none !important; }
-
-  .empty-hint { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; color: #e7e7ec; h2 { margin: 0; font-size: 28px; } p { opacity: .85; margin-top: 6px; } }
-
-  .fab { position: absolute; right: 14px; bottom: 14px; width: 44px; height: 44px; border-radius: 999px; border: none; background: #567c8d; color: #ecebe6; display: grid; place-items: center; cursor: pointer; box-shadow: 0 8px 22px rgba(0,0,0,.35); transition: transform .06s, filter .2s; &:hover { filter: brightness(1.05); } &:active { transform: translateY(1px); } }
 }
 
-/* Temas */
 .theme-plain { background-color: var(--board-bg, #ffffff); background-image: none; }
-.theme-grid  { background-color: var(--board-bg, #fff7ef);
-  background-image:
+.theme-grid  { background-color: var(--board-bg, #fff7ef); background-image:
     linear-gradient(to right, rgba(0,0,0,.08) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(0,0,0,.08) 1px, transparent 1px);
-  background-size: 20px 20px;
-}
+    linear-gradient(to bottom, rgba(0,0,0,.08) 1px, transparent 1px); background-size: 20px 20px; }
 .theme-dotted{ background-color: var(--board-bg, #ffffff); background-image: radial-gradient(circle, rgba(0,0,0,.32) 1.1px, transparent 1.1px); background-size: 14px 14px; }
 .theme-image{ background-color: var(--board-bg, #ffffff); background-image: var(--board-image); background-size: cover; background-position: center; }
 
-/* Responsive toolbar */
+.graph-layer { position: absolute; inset: 0; z-index: 0; }
+
 @media (max-width: 900px){ .toolbar{ gap:10px; .tools-right{ margin-left:auto; } } }
-@media (max-width: 640px){
-  .toolbar{ flex-direction: column; align-items: stretch;
-    .tools-left, .tools-right{ justify-content: flex-start; }
-  }
-}
+@media (max-width: 640px){ .toolbar{ flex-direction: column; align-items: stretch; .tools-left, .tools-right{ justify-content: flex-start; } } }
 </style>
