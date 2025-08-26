@@ -3,11 +3,14 @@
     <nav>
       <div class="container">
         <ul class="nav-list" :class="{ 'is-open': isOpen }">
-          <!-- Izquierda: Logo -->
+          <!-- Izquierda: Logo + Wordmark -->
           <li class="nav-logo">
             <a class="logo" href="/" aria-label="Home">
               <img class="logo-img" src="@/assets/img/graph_logo.png" alt="Logo Grafos" />
             </a>
+
+            <!-- Wordmark Graphroom (Bellota) -->
+            <span class="brand-wordmark" aria-label="Graphroom">Graphroom</span>
 
             <!-- Botón hamburguesa (solo móvil) -->
             <button class="btn nav-toggle" @click="toggleNav" aria-label="Abrir/cerrar menú">
@@ -25,6 +28,7 @@
                 </ul>
               </li>
 
+              <li class="nav-link" tabindex="0">Inicio</li>
               <li class="nav-link" tabindex="0">Ayuda</li>
               <li class="nav-link" tabindex="0">Contacto</li>
             </ul>
@@ -52,7 +56,7 @@ $primary-color-light: rgba($primary-color, 0.2);
 $shadow-color: #e1e5ee;
 $break-point: 768px;
 
-@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@300&family=Poppins:wght@300&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@300&family=Poppins:wght@300&family=Bellota:wght@300;400;700&display=swap");
 
 *,
 *::before,
@@ -84,7 +88,7 @@ nav {
     min-height: 72px;
     width: 100%;
 
-    /* Logo */
+    /* Logo + Wordmark */
     .nav-logo {
       flex: 0 0 auto;
       display: flex; align-items: center; gap: 0.75rem;
@@ -105,7 +109,22 @@ nav {
         opacity: 1;
       }
 
-      .nav-toggle { display: none; }
+      /* Wordmark: Bellota */
+      .brand-wordmark {
+        font-family: "Bellota", cursive;
+        font-weight: 700;
+        font-size: 1.35rem;
+        line-height: 1;
+        letter-spacing: 0.02em;
+        color: #ffffff;
+        margin-left: 0.1rem;
+        transform: translateY(1px);
+        white-space: nowrap;
+        text-shadow: 0 0 6px rgba(200, 217, 230, 0.35);
+        user-select: none;
+      }
+
+      .nav-toggle { display: none; margin-left: .25rem; }
     }
 
     /* Menú centrado */
@@ -189,6 +208,7 @@ nav {
     .nav-logo {
       width: 100%; justify-content: space-between;
       .logo-img { height: 28px; } /* tamaño móvil */
+      .brand-wordmark { display: none; } /* Oculta el wordmark en móvil para ahorrar espacio */
       .nav-toggle { display: inline-flex; }
     }
 
