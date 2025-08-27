@@ -264,7 +264,7 @@ onMounted(() => {
     if (deleteMode.value) {
       const isEdge = ele.isEdge()
       const isText = ele.isNode() && ele.hasClass('text-block')
-      const isGraphNode = ele.isNode() && !isText
+      const isGraphNode = ele.isNode() && !ele.hasClass('text-block')
       const tipo = isEdge ? 'arista' : (isText ? 'texto' : 'nodo')
       const detalle = isGraphNode ? 'Se eliminarán también sus aristas asociadas.' : (isText ? 'Se eliminará el bloque de texto.' : '')
       const nombre = isText ? (ele.data('text')?.toString().slice(0,40)||'Texto') : isGraphNode ? (ele.data('label')||'Nodo') : ''
@@ -410,7 +410,22 @@ async function cyPngBlob(opts = {}){
   }
 }
 
-/** Captura la pizarra completa (fondo + grafo) con html2canvas si está disponible */
+/** 🔧 Genera un patrón PNG repetible para el tema punteado (workaround html2canvas) */
+function dottedTileDataUrl (size = 14, radius = 1.1, color = 'rgba(0,0,0,0.32)') {
+  const c = document.createElement('canvas')
+  c.width = size; c.height = size
+  const ctx = c.getContext('2d')
+  ctx.clearRect(0, 0, size, size)
+  ctx.fillStyle = color
+  ctx.beginPath()
+  // punto centrado
+  ctx.arc(size / 2, size / 2, radius, 0, Math.PI * 2)
+  ctx.fill()
+  return c.toDataURL('image/png')
+}
+
+/** Captura la pizarra completa (fondo + grafo) con html2canvas si está disponible.
+ *  Si el tema es "dotted", sustituye temporalmente el radial-gradient por un tile PNG. */
 async function captureBoardCanvas(scale = 2){
   let html2canvas
   try {
@@ -427,15 +442,42 @@ async function captureBoardCanvas(scale = 2){
   const prev = fabs.map(el => el.style.visibility)
   fabs.forEach(el => { el.style.visibility = 'hidden' })
 
+  // Si el tema es punteado, parchear fondo con imagen repetible
+  let patched = false
+  let prevBgImage = '', prevBgSize = '', prevBgRepeat = '', prevBgOrigin = '', prevBgPosition = ''
+  if (theme.value === 'dotted') {
+    patched = true
+    prevBgImage = boardEl.style.backgroundImage
+    prevBgSize = boardEl.style.backgroundSize
+    prevBgRepeat = boardEl.style.backgroundRepeat
+    prevBgOrigin = boardEl.style.backgroundOrigin
+    prevBgPosition = boardEl.style.backgroundPosition
+
+    const tile = dottedTileDataUrl(14, 1.1, 'rgba(0,0,0,0.32)')
+    boardEl.style.backgroundImage = `url("${tile}")`
+    boardEl.style.backgroundSize = '14px 14px'
+    boardEl.style.backgroundRepeat = 'repeat'
+    boardEl.style.backgroundOrigin = 'padding-box'
+    boardEl.style.backgroundPosition = '0 0'
+  }
+
   try {
     const canvas = await html2canvas(boardEl, {
       useCORS: true,
-      backgroundColor: null, // respeta el CSS de fondo (grid/punteado/imagen)
+      backgroundColor: null,
       scale
     })
     return canvas
   } finally {
-    // Restaurar
+    // Restaurar fondo si fue parcheado
+    if (patched) {
+      boardEl.style.backgroundImage = prevBgImage
+      boardEl.style.backgroundSize = prevBgSize
+      boardEl.style.backgroundRepeat = prevBgRepeat
+      boardEl.style.backgroundOrigin = prevBgOrigin
+      boardEl.style.backgroundPosition = prevBgPosition
+    }
+    // Restaurar FABs
     fabs.forEach((el, i) => { el.style.visibility = prev[i] || '' })
   }
 }
@@ -685,7 +727,6 @@ async function confirmClear(e){
 </script>
 
 <style scoped lang="scss">
-/* No cambié tu CSS existente de la pizarra */
 $navbar-height: 72px;
 $wrap-max: 1200px;
 
