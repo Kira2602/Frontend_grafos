@@ -251,7 +251,7 @@ onBeforeUnmount(()=>{
     <div class="content--canvas" ref="containerRef"></div>
 
     <section class="hero">
-      <h1>Resilience and technology<br> our blueprint for tomorrow.</h1>
+      <h1>Graphroom: pizarra interactiva para crear nodos,<br>formar grafos, añadir notas y guardar tu trabajo.</h1>
       <a href="#cards" @click.prevent="$emit('cta')">
         Herramientas
       </a>

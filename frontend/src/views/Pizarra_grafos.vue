@@ -330,7 +330,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => { cy?.destroy() })
 
-/* Helpers */
+/* ===== Helpers comunes ===== */
 function ensureEdge(source, target, weight){
   const existing = cy.$(`edge[source="${source}"][target="${target}"]`)
   if (existing.empty()) cy.add({ group:'edges', data:{ id:`e_${source}_${target}_${Date.now()}`, source, target, weight } })
@@ -409,6 +409,10 @@ async function cyPngBlob(opts = {}){
     return dataURLtoBlob(dataUrl)
   }
 }
+/* util: blob desde canvas */
+function canvasToBlob(canvas, type='image/png', quality){
+  return new Promise(resolve => canvas.toBlob(b => resolve(b), type, quality))
+}
 
 /** 🔧 Genera un patrón PNG repetible para el tema punteado (workaround html2canvas) */
 function dottedTileDataUrl (size = 14, radius = 1.1, color = 'rgba(0,0,0,0.32)') {
@@ -418,7 +422,6 @@ function dottedTileDataUrl (size = 14, radius = 1.1, color = 'rgba(0,0,0,0.32)')
   ctx.clearRect(0, 0, size, size)
   ctx.fillStyle = color
   ctx.beginPath()
-  // punto centrado
   ctx.arc(size / 2, size / 2, radius, 0, Math.PI * 2)
   ctx.fill()
   return c.toDataURL('image/png')
@@ -437,12 +440,12 @@ async function captureBoardCanvas(scale = 2){
   const boardEl = boardRef.value
   if (!boardEl) return null
 
-  // Ocultar FABs temporalmente para que no salgan en la captura
+  // ocultar FABs
   const fabs = Array.from(boardEl.querySelectorAll('.fab'))
   const prev = fabs.map(el => el.style.visibility)
   fabs.forEach(el => { el.style.visibility = 'hidden' })
 
-  // Si el tema es punteado, parchear fondo con imagen repetible
+  // parche punteado
   let patched = false
   let prevBgImage = '', prevBgSize = '', prevBgRepeat = '', prevBgOrigin = '', prevBgPosition = ''
   if (theme.value === 'dotted') {
@@ -462,14 +465,9 @@ async function captureBoardCanvas(scale = 2){
   }
 
   try {
-    const canvas = await html2canvas(boardEl, {
-      useCORS: true,
-      backgroundColor: null,
-      scale
-    })
+    const canvas = await html2canvas(boardEl, { useCORS: true, backgroundColor: null, scale })
     return canvas
   } finally {
-    // Restaurar fondo si fue parcheado
     if (patched) {
       boardEl.style.backgroundImage = prevBgImage
       boardEl.style.backgroundSize = prevBgSize
@@ -477,96 +475,128 @@ async function captureBoardCanvas(scale = 2){
       boardEl.style.backgroundOrigin = prevBgOrigin
       boardEl.style.backgroundPosition = prevBgPosition
     }
-    // Restaurar FABs
     fabs.forEach((el, i) => { el.style.visibility = prev[i] || '' })
   }
 }
 
-async function exportImagen(){
-  // Primero intentamos html2canvas para incluir EL FONDO
+/* === helpers de exportación a blobs === */
+async function getPngBlobWithBg(){
   const canvas = await captureBoardCanvas(2)
+  if (canvas) return await canvasToBlob(canvas, 'image/png')
+  return await cyPngBlob({ scale: 2 })
+}
+
+async function getPdfBlobWithBg(){
+  let jsPDFmod = null
+  try { jsPDFmod = await import('jspdf') } catch (_) {}
+  if (!jsPDFmod?.jsPDF) return null
+
+  const canvas = await captureBoardCanvas(2)
+  let dataUrl, w, h
   if (canvas){
-    // toBlob para mejor calidad
-    const blob = await new Promise(resolve => canvas.toBlob(b => resolve(b), 'image/png'))
-    const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')
-    downloadBlob(`grafos-${stamp}.png`, blob)
-    return
+    dataUrl = canvas.toDataURL('image/png')
+    w = canvas.width; h = canvas.height
+  } else {
+    // fallback: solo grafo
+    dataUrl = cy.png({ full:true, scale: 2, bg: getBoardBg() })
+    // medir imagen para conservar proporción
+    const dims = await new Promise(res => {
+      const img = new Image()
+      img.onload = () => res({ w: img.naturalWidth || img.width, h: img.naturalHeight || img.height })
+      img.src = dataUrl
+    })
+    w = dims.w; h = dims.h
   }
 
-  // Fallback: solo el grafo (sin fondo CSS)
-  const { isConfirmed } = await Swal.fire({
-    icon:'info',
-    title:'Exportar imagen',
-    text:'Para incluir el fondo (grilla/punteado) instala "html2canvas". ¿Descargar solo el grafo?',
-    showCancelButton:true, confirmButtonText:'Sí, descargar', cancelButtonText:'Cancelar', ...swalColors
-  })
-  if (!isConfirmed) return
-  try{
-    const blob = await cyPngBlob({ scale: 2 })
-    const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')
-    downloadBlob(`grafos-${stamp}.png`, blob)
-  }catch(e){
-    console.error(e)
-    Swal.fire({ icon:'error', title:'No se pudo exportar la imagen', text:'Ocurrió un error al generar el PNG.', ...swalColors })
-  }
+  const { jsPDF } = jsPDFmod
+  const orientation = w >= h ? 'l' : 'p'
+  const doc = new jsPDF({ orientation, unit:'pt', compress:true })
+  const pageW = doc.internal.pageSize.getWidth()
+  const pageH = doc.internal.pageSize.getHeight()
+  const margin = 24
+  const scale = Math.min((pageW - margin*2)/w, (pageH - margin*2)/h)
+  const imgW = w * scale, imgH = h * scale
+  const x = (pageW - imgW)/2, y = (pageH - imgH)/2
+  doc.addImage(dataUrl, 'PNG', x, y, imgW, imgH)
+  return doc.output('blob')
+}
+
+function getJsonBlob(){
+  const json = serializeGraph()
+  return new Blob([JSON.stringify(json, null, 2)], { type:'application/json' })
+}
+
+async function exportImagen(){
+  const blob = await getPngBlobWithBg()
+  const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')
+  downloadBlob(`grafos-${stamp}.png`, blob)
 }
 
 async function exportPDF(){
-  // Intentamos html2canvas + jsPDF para que el PDF también respete el fondo
-  let jsPDFmod = null
-  try { jsPDFmod = await import('jspdf') } catch (_) {}
-
-  const canvas = await captureBoardCanvas(2)
-  if (canvas && jsPDFmod?.jsPDF){
-    try{
-      const { jsPDF } = jsPDFmod
-      const dataUrl = canvas.toDataURL('image/png')
-      const w = canvas.width, h = canvas.height
-      const orientation = w >= h ? 'l' : 'p'
-      const doc = new jsPDF({ orientation, unit:'pt', compress:true })
-      const pageW = doc.internal.pageSize.getWidth()
-      const pageH = doc.internal.pageSize.getHeight()
-      const margin = 24
-      const scale = Math.min((pageW - margin*2)/w, (pageH - margin*2)/h)
-      const imgW = w * scale, imgH = h * scale
-      const x = (pageW - imgW)/2, y = (pageH - imgH)/2
-      doc.addImage(dataUrl, 'PNG', x, y, imgW, imgH)
-      const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')
-      doc.save(`grafos-${stamp}.pdf`)
-      return
-    }catch(e){
-      console.error(e)
-    }
-  }
-
-  // Si falta alguna lib, ofrece alternativas
-  if (!jsPDFmod?.jsPDF || !canvas){
-    const { value } = await Swal.fire({
-      title: 'Exportar PDF',
-      html: `<div style="text-align:left">
-        <p>Para que el PDF incluya el fondo, instala:</p>
-        <pre style="background:#1e2430;color:#e7e7ec;padding:8px;border-radius:8px">npm i html2canvas jspdf</pre>
-        <p>Elige una alternativa ahora:</p>
-      </div>`,
-      input: 'select',
-      inputOptions: {
-        png: 'Descargar PNG (con/sin fondo según librería)',
-        grafo: 'Descargar PNG solo grafo',
-        cancelar: 'Cancelar'
-      },
-      inputValue: 'png',
-      showCancelButton: false,
-      confirmButtonText: 'Continuar',
-      ...swalColors
-    })
-    if (value === 'png') return exportImagen()
-    if (value === 'grafo'){
-      const blob = await cyPngBlob({ scale: 2 })
-      const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')
-      downloadBlob(`grafos-${stamp}.png`, blob)
-    }
+  const pdfBlob = await getPdfBlobWithBg()
+  if (pdfBlob){
+    const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')
+    downloadBlob(`grafos-${stamp}.pdf`, pdfBlob)
     return
   }
+  // aviso si falta jspdf
+  await Swal.fire({
+    icon:'info',
+    title:'Falta dependencia',
+    html:'No se encontró <code>jspdf</code>. Instala: <pre style="background:#1e2430;color:#e7e7ec;padding:8px;border-radius:8px">npm i jspdf html2canvas</pre>',
+    ...swalColors
+  })
+}
+
+async function exportJSON(){
+  try{
+    const blob = getJsonBlob()
+    const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')
+    downloadBlob(`grafos-${stamp}.json`, blob)
+  }catch(e){
+    console.error(e)
+    Swal.fire({ icon:'error', title:'No se pudo exportar el JSON', text:'Ocurrió un error al serializar el grafo.', ...swalColors })
+  }
+}
+
+/* === NUEVO: exportar ZIP con PNG + PDF + JSON === */
+async function exportZIP(){
+  let JSZipMod = null
+  try { JSZipMod = await import('jszip') } catch (_) {}
+  if (!JSZipMod?.default){
+    await Swal.fire({
+      icon:'info',
+      title:'Falta dependencia',
+      html:'Para crear ZIP instala: <pre style="background:#1e2430;color:#e7e7ec;padding:8px;border-radius:8px">npm i jszip jspdf html2canvas</pre>',
+      ...swalColors
+    })
+    return
+  }
+  const JSZip = JSZipMod.default
+  const zip = new JSZip()
+  const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')
+
+  // PNG
+  const pngBlob = await getPngBlobWithBg()
+  zip.file(`grafos-${stamp}.png`, pngBlob)
+
+  // JSON
+  const jsonBlob = getJsonBlob()
+  zip.file(`grafos-${stamp}.json`, jsonBlob)
+
+  // PDF (si jspdf disponible)
+  const pdfBlob = await getPdfBlobWithBg()
+  if (pdfBlob) {
+    zip.file(`grafos-${stamp}.pdf`, pdfBlob)
+  } else {
+    zip.file('LEEME.txt',
+      'No se incluyó el PDF porque no se encontró la librería "jspdf".\n' +
+      'Instala: npm i jspdf html2canvas\n' +
+      'El ZIP contiene PNG y JSON correctamente.\n')
+  }
+
+  const zipBlob = await zip.generateAsync({ type: 'blob' })
+  downloadBlob(`grafos-${stamp}.zip`, zipBlob)
 }
 
 function serializeGraph(){
@@ -589,18 +619,6 @@ function serializeGraph(){
     meta: { version: 1, exportedAt: new Date().toISOString() },
     board: { theme: theme.value, color: color.value, image: image.value, showGrid: showGrid.value },
     graph: { nodes, edges }
-  }
-}
-
-async function exportJSON(){
-  try{
-    const json = serializeGraph()
-    const blob = new Blob([JSON.stringify(json, null, 2)], { type:'application/json' })
-    const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')
-    downloadBlob(`grafos-${stamp}.json`, blob)
-  }catch(e){
-    console.error(e)
-    Swal.fire({ icon:'error', title:'No se pudo exportar el JSON', text:'Ocurrió un error al serializar el grafo.', ...swalColors })
   }
 }
 
@@ -692,6 +710,7 @@ const handleExport = async (type) => {
   if (type === 'image') await exportImagen()
   else if (type === 'pdf') await exportPDF()
   else if (type === 'json') await exportJSON()
+  else if (type === 'zip') await exportZIP()
   showExport.value = false
 }
 

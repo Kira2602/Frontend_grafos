@@ -40,6 +40,12 @@
             <i class="fa-regular fa-file-lines"></i>
             <span>JSON</span>
           </button>
+
+          <!-- NUEVO: ZIP -->
+          <button class="opt" @click="select('zip')">
+            <i class="fa-solid fa-file-zipper"></i>
+            <span>ZIP (PNG + PDF + JSON)</span>
+          </button>
         </div>
       </div>
     </div>
@@ -94,7 +100,7 @@ const select = (format) => {
 /* Modal */
 .export-modal {
   width: min(92vw, 420px);
-  background: #2c2f3a;                /* match panel-bg */
+  background: #2c2f3a;
   border: 1px solid rgba(255,255,255,.08);
   border-radius: 14px;
   box-shadow: 0 16px 48px rgba(0,0,0,.5);
@@ -128,22 +134,20 @@ const select = (format) => {
 
 .sub { opacity: .9; margin: 2px 0 10px; font-size: 14px; text-align: center; }
 
-/* ====== Botones más angostos ====== */
 $options-min-w: 180px;
 
 .options {
   display: grid; 
   gap: 8px;
-  justify-items: center;   /* centra cada botón en la columna */
+  justify-items: center;
 }
 
 .opt {
   display: inline-flex; align-items: center; justify-content: center; gap: 10px;
-  /* antes: width: 100%; -> ahora ancho según contenido */
   width: auto;
-  min-width: $options-min-w;       /* ancho mínimo cómodo */
-  max-width: 260px;                 /* opcional: evita botones demasiado largos */
-  padding: 10px 16px;               /* un poco más de padding horizontal */
+  min-width: $options-min-w;
+  max-width: 260px;
+  padding: 10px 16px;
   border-radius: 10px;
   background: rgba(255,255,255,.06);
   border: 1px solid rgba(255,255,255,.08);
@@ -156,6 +160,6 @@ $options-min-w: 180px;
 }
 
 @media (max-width: 360px) {
-  .opt { min-width: 140px; } /* más compacto en pantallas muy pequeñas */
+  .opt { min-width: 140px; }
 }
 </style>

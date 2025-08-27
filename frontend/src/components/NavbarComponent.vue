@@ -9,10 +9,8 @@
               <img class="logo-img" src="../assets/img/graph_logo.png" alt="Logo Grafos" />
             </a>
 
-            <!-- Wordmark Graphroom (Bellota) -->
             <span class="brand-wordmark" aria-label="Graphroom">Graphroom</span>
 
-            <!-- Botón hamburguesa (solo móvil) -->
             <button class="btn nav-toggle" @click="toggleNav" aria-label="Abrir/cerrar menú">
               <i class="fa fa-bars"></i>
             </button>
@@ -28,7 +26,7 @@
                 </ul>
               </li>
 
-              <!-- Inicio: navega a Home.vue -->
+              <!-- Inicio -->
               <li
                 class="nav-link"
                 role="link"
@@ -40,8 +38,9 @@
                 Inicio
               </li>
 
-              <!-- Ayuda: abre modal -->
+              <!-- Ayuda: SOLO en /pizarra -->
               <li
+                v-if="showHelp"
                 class="nav-link"
                 role="button"
                 tabindex="0"
@@ -60,16 +59,17 @@
     </nav>
   </header>
 
-  <!-- ✅ Usa prop `open` y evento `close` -->
+  <!-- Modal Ayuda: solo se monta en /pizarra -->
   <HelpModal
+    v-if="showHelp"
     :open="isHelpOpen"
     @close="isHelpOpen = false"
   />
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import HelpModal from './HelpModal.vue'
 
 const isOpen = ref(false)
@@ -78,15 +78,26 @@ const isHelpOpen = ref(false)
 const toggleNav = () => (isOpen.value = !isOpen.value)
 
 const router = useRouter()
+const route = useRoute()
+
 const goHome = () => {
   isOpen.value = false
-  router.push('/')         // navega al Home
+  router.push('/')
 }
 
 const openHelp = () => {
   isOpen.value = false
-  isHelpOpen.value = true  // abre el modal
+  isHelpOpen.value = true
 }
+
+/* 👇 Mostrar "Ayuda" SOLO en la vista Pizarra (name: 'Pizarra' / path: '/pizarra') */
+const showHelp = computed(() => route.name === 'Pizarra' || route.path === '/pizarra')
+
+/* Cierra el menú (y el modal si cambia de ruta) */
+watch(() => route.fullPath, () => {
+  isOpen.value = false
+  if (!showHelp.value) isHelpOpen.value = false
+})
 </script>
 
 <style lang="scss" scoped>
