@@ -252,8 +252,6 @@ onBeforeUnmount(()=>{
 
     <section class="hero">
       <h1>Resilience and technology<br> our blueprint for tomorrow.</h1>
-
-      <!-- Botón: emite el evento y evitamos navegación externa -->
       <a href="#cards" @click.prevent="$emit('cta')">
         Herramientas
       </a>
@@ -262,7 +260,6 @@ onBeforeUnmount(()=>{
 </template>
 
 <style scoped>
-/* Importa la fuente Bellota desde Google Fonts */
 @import url('https://fonts.googleapis.com/css2?family=Bellota:wght@300;400;700&display=swap');
 
 .hero-stage{
@@ -291,8 +288,6 @@ onBeforeUnmount(()=>{
   color: #fff;
   line-height: 42px;
   pointer-events: none;
-
-  /* Bellota como tipografía base del bloque */
   font-family: "Bellota", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
 }
 

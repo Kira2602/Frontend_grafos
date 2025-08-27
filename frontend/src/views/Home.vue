@@ -1,14 +1,19 @@
 <script setup>
 import { onMounted } from 'vue'
+import { useRouter } from 'vue-router'          
 import NavbarComponent from '../components/NavbarComponent.vue'
 import Background from '../components/Background.vue'
-import HeroHeader from '../components/HeroHeader.vue' // ⬅️ nuevo
+import HeroHeader from '../components/HeroHeader.vue' 
 
-// Scroll al carrusel cuando se hace clic en el CTA del hero
+const router = useRouter()                      
+const goToPizarra = () => {                     
+  router.push({ name: 'Pizarra' })
+}
+
 function onHeroCta () {
   const section = document.getElementById('cards')
   if (!section) return
-  const NAV_H = 72 // altura del navbar
+  const NAV_H = 72 
   const top = section.getBoundingClientRect().top + window.pageYOffset - NAV_H - 8
   window.scrollTo({ top, behavior: 'smooth' })
 }
@@ -43,15 +48,14 @@ onMounted(() => {
 </script>
 
 <template>
-  <!-- El Background es el contenedor y pinta su animación detrás -->
   <Background class="bg-root">
     <main class="page-content">
       <NavbarComponent />
 
-      <!-- ======= NUEVO: Header/Hero ======= -->
+      <!-- HEADER -->
       <HeroHeader @cta="onHeroCta" />
 
-      <!-- ======= SECCIÓN: Carrusel de Cards (Swiper) ======= -->
+      <!--  CARDS SECTION -->
       <section id="cards" class="cards-carousel">
         <div class="slide-container swiper">
           <div class="slide-content">
@@ -61,7 +65,7 @@ onMounted(() => {
                 <div class="image-content">
                   <span class="overlay"></span>
                   <div class="card-image">
-                    <img src="" alt="" class="card-img" />
+                    <img src="../assets/img/pizarra_grafos.png" alt="" class="card-img" />
                   </div>
                 </div>
                 <div class="card-content">
@@ -70,7 +74,8 @@ onMounted(() => {
                     Pizarra de grafos: crea/mueve nodos, conéctalos con aristas con peso,
                     agrega notas y personaliza el fondo; importa/exporta JSON, PNG y PDF.
                   </p>
-                  <button class="button">Iniciar</button>
+                  <!-- Navega a la vista de Pizarra -->
+                  <button class="button" @click="goToPizarra">Iniciar</button>
                 </div>
               </div>
 
@@ -79,7 +84,7 @@ onMounted(() => {
                 <div class="image-content">
                   <span class="overlay"></span>
                   <div class="card-image">
-                    <img src="" alt="" class="card-img" />
+                    <img src="../assets/img/enproceso.jpg" alt="" class="card-img" />
                   </div>
                 </div>
                 <div class="card-content">
@@ -97,7 +102,7 @@ onMounted(() => {
                 <div class="image-content">
                   <span class="overlay"></span>
                   <div class="card-image">
-                    <img src="" alt="" class="card-img" />
+                    <img src="../assets/img/enproceso.jpg" alt="" class="card-img" />
                   </div>
                 </div>
                 <div class="card-content">
@@ -155,7 +160,7 @@ html { scroll-behavior: smooth; }
   width: 100%;
   padding: 40px 0;
   font-family: 'Poppins', sans-serif;
-  position: relative; /* para flechas y dots */
+  position: relative; 
 }
 
 .cards-carousel .slide-content{

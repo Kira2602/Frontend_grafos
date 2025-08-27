@@ -6,7 +6,7 @@
           <!-- Izquierda: Logo + Wordmark -->
           <li class="nav-logo">
             <a class="logo" href="/" aria-label="Home">
-              <img class="logo-img" src="@/assets/img/graph_logo.png" alt="Logo Grafos" />
+              <img class="logo-img" src="../assets/img/graph_logo.png" alt="Logo Grafos" />
             </a>
 
             <!-- Wordmark Graphroom (Bellota) -->
@@ -22,32 +22,71 @@
           <li class="nav-center">
             <ul class="nav-menu">
               <li class="nav-link" tabindex="0">
-                Grafos <i class="fa fa-chevron-up"></i>
+                Algoritmos <i class="fa fa-chevron-up"></i>
                 <ul class="nav-drop" role="menu">
-                  <li role="menuitem">Algoritmo</li>
+                  <li role="menuitem">...</li>
                 </ul>
               </li>
 
-              <li class="nav-link" tabindex="0">Inicio</li>
-              <li class="nav-link" tabindex="0">Ayuda</li>
+              <!-- Inicio: navega a Home.vue -->
+              <li
+                class="nav-link"
+                role="link"
+                tabindex="0"
+                @click="goHome"
+                @keydown.enter="goHome"
+                aria-label="Ir al inicio"
+              >
+                Inicio
+              </li>
+
+              <!-- Ayuda: abre modal -->
+              <li
+                class="nav-link"
+                role="button"
+                tabindex="0"
+                aria-haspopup="dialog"
+                @click="openHelp"
+                @keydown.enter="openHelp"
+              >
+                Ayuda
+              </li>
+
               <li class="nav-link" tabindex="0">Contacto</li>
             </ul>
           </li>
-
-          <!-- (Opcional) Acciones a la derecha -->
-          <!-- <li class="nav-actions">
-            <button class="btn">Sign in</button>
-          </li> -->
         </ul>
       </div>
     </nav>
   </header>
+
+  <!-- ✅ Usa prop `open` y evento `close` -->
+  <HelpModal
+    :open="isHelpOpen"
+    @close="isHelpOpen = false"
+  />
 </template>
 
 <script setup>
-import { ref } from "vue";
-const isOpen = ref(false);
-const toggleNav = () => (isOpen.value = !isOpen.value);
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import HelpModal from './HelpModal.vue'
+
+const isOpen = ref(false)
+const isHelpOpen = ref(false)
+
+const toggleNav = () => (isOpen.value = !isOpen.value)
+
+const router = useRouter()
+const goHome = () => {
+  isOpen.value = false
+  router.push('/')         // navega al Home
+}
+
+const openHelp = () => {
+  isOpen.value = false
+  isHelpOpen.value = true  // abre el modal
+}
 </script>
 
 <style lang="scss" scoped>
@@ -73,7 +112,6 @@ nav {
   z-index: 50;
   font-family: "Poppins", sans-serif;
 
-  /* 🎨 Glass effect */
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -88,18 +126,13 @@ nav {
     min-height: 72px;
     width: 100%;
 
-    /* Logo + Wordmark */
     .nav-logo {
       flex: 0 0 auto;
       display: flex; align-items: center; gap: 0.75rem;
 
-      .logo {
-        display: inline-flex; align-items: center; text-decoration: none; cursor: pointer;
-      }
+      .logo { display: inline-flex; align-items: center; text-decoration: none; cursor: pointer; }
       .logo-img {
-        height: 36px;            /* tamaño desktop */
-        width: auto;
-        opacity: .95;
+        height: 36px; width: auto; opacity: .95;
         transition: transform .2s ease, filter .2s ease, opacity .2s ease;
       }
       .logo:hover .logo-img,
@@ -109,7 +142,6 @@ nav {
         opacity: 1;
       }
 
-      /* Wordmark: Bellota */
       .brand-wordmark {
         font-family: "Bellota", cursive;
         font-weight: 700;
@@ -127,25 +159,19 @@ nav {
       .nav-toggle { display: none; margin-left: .25rem; }
     }
 
-    /* Menú centrado */
     .nav-center {
       flex: 1 1 auto;
       display: flex; justify-content: center; align-items: center; min-width: 0;
-
       .nav-menu { display: flex; align-items: center; gap: 1.5rem; margin: 0; padding: 0; }
     }
 
-    /* (Opcional) Acciones a la derecha */
-    .nav-actions { margin-left: auto; display: flex; align-items: center; }
-
-    /* Opciones */
     .nav-link {
       font-weight: 600;
       padding: 1.5rem 1.2rem;
       position: relative;
       cursor: pointer;
       white-space: nowrap;
-      color: white;  /* texto blanco */
+      color: white;
 
       i { color: white; transition: transform 0.3s; }
 
@@ -158,7 +184,6 @@ nav {
       &:hover::after { width: 60%; }
       &:hover { ul { opacity: 1; visibility: visible; } i { transform: rotate(180deg); } }
 
-      /* Dropdown */
       .nav-drop {
         position: absolute; top: 4rem;
         background: rgba(0, 0, 0, 0.7);
@@ -194,7 +219,6 @@ nav {
 @media screen and (min-width: $break-point) {
   nav .nav-list {
     .nav-center { display: flex !important; }
-    .nav-actions { display: flex !important; }
     .nav-logo .nav-toggle { display: none !important; }
   }
 }
@@ -207,13 +231,13 @@ nav {
 
     .nav-logo {
       width: 100%; justify-content: space-between;
-      .logo-img { height: 28px; } /* tamaño móvil */
-      .brand-wordmark { display: none; } /* Oculta el wordmark en móvil para ahorrar espacio */
+      .logo-img { height: 28px; }
+      .brand-wordmark { display: none; }
       .nav-toggle { display: inline-flex; }
     }
 
-    .nav-center, .nav-actions { display: none; width: 100%; }
-    &.is-open { .nav-center, .nav-actions { display: block !important; } }
+    .nav-center { display: none; width: 100%; }
+    &.is-open { .nav-center { display: block !important; } }
 
     .nav-center { margin-top: 0.5rem; display: block; }
     .nav-menu  { display: block; }
@@ -222,13 +246,11 @@ nav {
       padding: 1rem 0.5rem; display: block;
       i { right: 0.5rem; top: 1.2rem; }
 
-      .nav-drop { position: relative; top: 0.4rem; box-shadow: unset; width: 100%; margin-left: 0; opacity: 0; visibility: hidden; }
+      .nav-drop { position: relative; top: 0.4rem; width: 100%; margin-left: 0; opacity: 0; visibility: hidden; }
       &:after { top: 2.6em; left: 0.08em; }
       &:hover::after { width: 4em; }
       &:hover .nav-drop { position: relative; opacity: 1; visibility: visible; }
     }
-
-    .nav-actions { margin-top: 0.6rem; display: block; text-align: left; .btn { width: 100%; } }
   }
 }
 </style>
