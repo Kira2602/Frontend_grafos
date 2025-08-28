@@ -11,7 +11,7 @@
             <i class="fa-solid fa-link"></i> Conectar
           </button>
           <button class="tool" :class="{ 'is-active': moveMode }" @click="toggleMoveMode">
-            <i class="fa-solid fa-hand"></i> Mover
+            <i class="fa-solid fa-hand"></i> Mover 
           </button>
           <button class="tool" :class="{ 'is-active': deleteMode }" @click="toggleDeleteMode">
             <i class="fa-solid fa-eraser"></i> Borrar
@@ -105,7 +105,6 @@ import ExportPopup from '@/components/ExportPopup.vue'
 import EdgePropsPopup from '@/components/EdgePropsPopup.vue'
 import NodeNamePopup from '@/components/NodeNamePopup.vue'
 import NodePropsPopup from '@/components/NodePropsPopup.vue'
-
 import cytoscape from 'cytoscape'
 import Swal from 'sweetalert2'
 import 'sweetalert2/dist/sweetalert2.min.css'
@@ -175,7 +174,7 @@ function onEdgePropsConfirm({ weight, dir }) {
   showEdgeProps.value = false
 }
 
-/* ===== Node name popup (crear/editar) ===== */
+/* AGREGAR Y EDITAR NODOS*/
 const showNodeName = ref(false)
 const nodeNameCtx = ref({ mode:'create', position:null, nodeId:null, defaultName:'Nodo' })
 function openNodeNameForCreate(position, defaultName='Nodo'){
@@ -193,16 +192,16 @@ function onNodeNameConfirm(name){
     const id = nextId('n')
     cy.add({ group:'nodes', data:{ id, label:name, color:base, borderColor: darkenColor(base, 28) }, position })
     const n = cy.$id(id)
-    resizeNodeToLabel(n)   // ⬅️ auto tamaño tras crear
+    resizeNodeToLabel(n)   // para ajustar tamaño
   } else if (mode==='edit' && nodeId){
     const n = cy.$id(nodeId)
     n.data('label', name)
-    resizeNodeToLabel(n)   // ⬅️ auto tamaño tras renombrar
+    resizeNodeToLabel(n)   
   }
   showNodeName.value = false
 }
 
-/* ===== Node props popup (editar) ===== */
+/* EDITAR NODOS */
 const showNodeProps = ref(false)
 const nodePropsCtx = ref({ nodeId:null, name:'', color:'#57c3d1' })
 function openNodeProps(node){
@@ -223,7 +222,6 @@ function onNodePropsConfirm({ name, color }){
   showNodeProps.value = false
 }
 
-/* ---------------------------------------- */
 
 onMounted(() => {
   cy = cytoscape({
@@ -236,7 +234,7 @@ onMounted(() => {
         'shape':'ellipse', 'width':56, 'height':56,
         'background-color':'data(color)',
         'border-width':2, 'border-color':'data(borderColor)',
-        'label':'data(label)', 'color':'#0f1120',
+        'label':'data(label)', 'color':'#0f1120', //color por defecto del texto nombre del nodo
         'font-family':'Poppins, sans-serif', 'font-weight':700, 'font-size':12,
         'text-valign':'center','text-halign':'center',
         'text-wrap':'wrap','text-max-width':52,
@@ -255,7 +253,7 @@ onMounted(() => {
         'width':2, 'line-color':'#000000','target-arrow-color':'#000000','target-arrow-shape':'triangle',
         'curve-style':'bezier','label':'data(weight)','text-background-color':'#2c2f3a','text-background-opacity':0.85,'text-background-padding':2,'text-rotation':'autorotate','font-size':12,'color':'#ffffff'
       }},
-      { selector:'edge:selected', style:{ 'line-color':'#000000','target-arrow-color':'#000000','width':3 }}
+      { selector:'edge:selected', style:{ 'line-color':'#000000','target-arrow-color':'#000000','width':3 }} //cambia de color al seleccionar 
     ]
   })
 
@@ -341,7 +339,6 @@ onMounted(() => {
 
 onBeforeUnmount(() => { cy?.destroy() })
 
-/* ===== Helpers de tamaño automático ===== */
 let _measureCtx = null
 function getMeasureCtx(){
   if (!_measureCtx){
@@ -355,28 +352,20 @@ function getMeasureCtx(){
 function resizeNodeToLabel(node){
   if (!node || node.hasClass('text-block')) return
   const label = (node.data('label') || '').toString()
-  const baseSize = 56         // tamaño mínimo usado en estilos
+  const baseSize = 56         // tamaño mínimo
   const paddingX = 24         // espacio extra a los lados
   const maxW = 260            // límite para no crecer infinito
 
-  // Medir texto con misma fuente que Cytoscape
   const ctx = getMeasureCtx()
   ctx.font = '700 12px "Poppins", sans-serif'
   const textW = Math.ceil(ctx.measureText(label || 'Nodo').width)
-
-  // Nuevo ancho: al menos base, a lo sumo maxW
   const newW = Math.max(baseSize, Math.min(textW + paddingX, maxW))
-  // Altura: mantenemos base (ellipse queda bonita). Si quieres crecer con líneas, cámbialo aquí.
   const newH = baseSize
-
-  // Aplicar al nodo
   node.style('width', newW)
   node.style('height', newH)
-  // Evita que haga wrap si ya cabe
   node.style('text-max-width', Math.max(52, newW - 10))
 }
 
-/* ===== Helpers comunes ===== */
 function ensureEdge(source, target, weight){
   const existing = cy.$(`edge[source="${source}"][target="${target}"]`)
   if (existing.empty()) cy.add({ group:'edges', data:{ id:`e_${source}_${target}_${Date.now()}`, source, target, weight } })
@@ -402,7 +391,6 @@ async function editTextNode(ele){
   if (isConfirmed) ele.data('text', (value??'').toString().trim())
 }
 
-/* color util */
 function darkenColor(hex, percent=25){
   try{
     const h = hex.replace('#','')
@@ -415,7 +403,7 @@ function darkenColor(hex, percent=25){
   }catch{ return '#167293' }
 }
 
-/* ===== estado existente ===== */
+/* ===== estado pizarra ===== */
 const theme = ref('grid')
 const color = ref('#fff7ef')
 const image = ref('')
@@ -455,12 +443,10 @@ async function cyPngBlob(opts = {}){
     return dataURLtoBlob(dataUrl)
   }
 }
-/* util: blob desde canvas */
 function canvasToBlob(canvas, type='image/png', quality){
   return new Promise(resolve => canvas.toBlob(b => resolve(b), type, quality))
 }
 
-/** 🔧 Genera un patrón PNG repetible para el tema punteado (workaround html2canvas) */
 function dottedTileDataUrl (size = 14, radius = 1.1, color = 'rgba(0,0,0,0.32)') {
   const c = document.createElement('canvas')
   c.width = size; c.height = size
@@ -473,25 +459,21 @@ function dottedTileDataUrl (size = 14, radius = 1.1, color = 'rgba(0,0,0,0.32)')
   return c.toDataURL('image/png')
 }
 
-/** Captura la pizarra completa (fondo + grafo) con html2canvas si está disponible.
- *  Si el tema es "dotted", sustituye temporalmente el radial-gradient por un tile PNG. */
 async function captureBoardCanvas(scale = 2){
   let html2canvas
   try {
     const mod = await import('html2canvas')
     html2canvas = mod.default || mod
   } catch (_) {
-    return null // no instalado
+    return null 
   }
   const boardEl = boardRef.value
   if (!boardEl) return null
 
-  // ocultar FABs
   const fabs = Array.from(boardEl.querySelectorAll('.fab'))
   const prev = fabs.map(el => el.style.visibility)
   fabs.forEach(el => { el.style.visibility = 'hidden' })
 
-  // parche punteado
   let patched = false
   let prevBgImage = '', prevBgSize = '', prevBgRepeat = '', prevBgOrigin = '', prevBgPosition = ''
   if (theme.value === 'dotted') {
@@ -525,7 +507,6 @@ async function captureBoardCanvas(scale = 2){
   }
 }
 
-/* === helpers de exportación a blobs === */
 async function getPngBlobWithBg(){
   const canvas = await captureBoardCanvas(2)
   if (canvas) return await canvasToBlob(canvas, 'image/png')
@@ -627,7 +608,7 @@ async function exportZIP(){
   const jsonBlob = getJsonBlob()
   zip.file(`grafos-${stamp}.json`, jsonBlob)
 
-  // PDF (si jspdf disponible)
+  // PDF 
   const pdfBlob = await getPdfBlobWithBg()
   if (pdfBlob) {
     zip.file(`grafos-${stamp}.pdf`, pdfBlob)
@@ -718,8 +699,6 @@ function loadFromSerializable(obj){
   cy.endBatch()
   cy.fit(undefined, 24)
   updateUidFromElements(nodes, edges)
-
-  // ⬅️ Ajustar tamaños de todos los nodos importados según su etiqueta
   cy.nodes().forEach(n => resizeNodeToLabel(n))
 }
 
@@ -751,7 +730,6 @@ async function importJSON(ev){
   }
 }
 
-/* Export popup handler */
 const handleExport = async (type) => {
   if (type === 'image') await exportImagen()
   else if (type === 'pdf') await exportPDF()
@@ -760,14 +738,12 @@ const handleExport = async (type) => {
   showExport.value = false
 }
 
-/* Toolbar toggles */
 function toggleNodeMode(){ nodeMode.value=!nodeMode.value; if(nodeMode.value){ connectMode.value=deleteMode.value=moveMode.value=textMode.value=false } applyGrabRules() }
 function toggleDeleteMode(){ deleteMode.value=!deleteMode.value; if(deleteMode.value){ nodeMode.value=connectMode.value=moveMode.value=textMode.value=false } applyGrabRules() }
 function toggleConnectMode(){ connectMode.value=!connectMode.value; if(connectMode.value){ nodeMode.value=deleteMode.value=moveMode.value=textMode.value=false } else clearPendingConnect(); applyGrabRules() }
 function toggleMoveMode(){ moveMode.value=!moveMode.value; if(moveMode.value){ nodeMode.value=connectMode.value=deleteMode.value=textMode.value=false } applyGrabRules() }
 function toggleTextMode(){ textMode.value=!textMode.value; if(textMode.value){ nodeMode.value=connectMode.value=deleteMode.value=moveMode.value=false } applyGrabRules() }
 
-/* Arrastre */
 function applyGrabRules(){
   if(!cy) return
   const anySpecial = nodeMode.value || connectMode.value || deleteMode.value || textMode.value
@@ -775,7 +751,7 @@ function applyGrabRules(){
   else cy.nodes().ungrabify()
 }
 
-/* Limpiar */
+/* Limpiar Pizarra */
 async function confirmClear(e){
   e?.stopPropagation?.()
   const { isConfirmed } = await Swal.fire({
