@@ -14,7 +14,6 @@ import cytoscape from 'cytoscape'
 import edgehandles from 'cytoscape-edgehandles'
 import dagre from 'cytoscape-dagre'
 
-// plugins
 cytoscape.use(edgehandles)
 cytoscape.use(dagre)
 
@@ -26,11 +25,9 @@ let eh = null
 let addNodeOnce = false
 const deleteMode = ref(false)
 
-// helper id incremental simple
 let uid = 1
 const nextId = () => `n${uid++}`
 
-// doble click simple
 let lastTap = { id: null, t: 0 }
 const isDoubleTap = (eleId) => {
   const now = Date.now()
@@ -45,7 +42,7 @@ onMounted(() => {
     wheelSensitivity: 0.25,
     minZoom: 0.1,
     maxZoom: 3,
-    layout: { name: 'preset' }, // usaremos posiciones manuales
+    layout: { name: 'preset' },
     style: [
       {
         selector: 'node',
@@ -86,7 +83,6 @@ onMounted(() => {
     ]
   })
 
-  // EdgeHandles (crear aristas arrastrando desde un nodo)
   eh = cy.edgehandles({
     handleNodes: 'node',
     handleSize: 10,
@@ -97,7 +93,6 @@ onMounted(() => {
     noEdgeEventsInDraw: true
   })
 
-  // click en fondo -> crear nodo si el modo está activo
   cy.on('tap', (evt) => {
     if (evt.target === cy && addNodeOnce) {
       const p = evt.position
@@ -106,10 +101,9 @@ onMounted(() => {
     }
   })
 
-  // mover nodo -> (si quisieras, aquí podrías avisar al backend)
   cy.on('dragfree', 'node', () => {})
 
-  // borrar en modo borrar
+ //Borrar modo
   cy.on('tap', 'node,edge', (evt) => {
     const ele = evt.target
     if (deleteMode.value) {
@@ -141,7 +135,6 @@ onBeforeUnmount(() => {
   cy?.destroy()
 })
 
-// === API expuesta a padre (Pizarra.vue) ===
 function startAddNode() { addNodeOnce = true }
 function toggleDeleteMode() { deleteMode.value = !deleteMode.value }
 function layoutDagre() {
@@ -178,7 +171,6 @@ async function toPNG() {
   return blob
 }
 
-// llamadas al backend (ajusta URL base si usas proxy)
 const API = import.meta.env.VITE_API_BASE || 'http://localhost:5000'
 
 async function saveToServer(graphId = 1) {

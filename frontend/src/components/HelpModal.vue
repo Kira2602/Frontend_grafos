@@ -21,25 +21,26 @@ const emit = defineEmits(['close'])
           ></iframe>
         </div>
 
-        <!-- Video + botón a la derecha -->
         <div class="right">
           <h2 class="heading">Tutorial</h2>
 
           <div class="video-wrapper">
             <iframe
               class="yt"
-              src="https://www.youtube.com/embed/4UPNkSC2kxA?rel=0"
+              src="https://www.youtube.com/embed/ALr2hemaNlk?rel=0&modestbranding=1&playsinline=1"
               title="YouTube video"
               frameborder="0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowfullscreen
+              loading="lazy"
+              referrerpolicy="strict-origin-when-cross-origin"
             ></iframe>
           </div>
 
           <div class="actions">
             <a
               class="yt-button"
-              href="https://youtu.be/4UPNkSC2kxA?si=uxavzF388_kVSE-i"
+              href="https://www.youtube.com/watch?v=ALr2hemaNlk"
               target="_blank"
               rel="noopener"
             >
