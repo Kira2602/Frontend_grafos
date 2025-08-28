@@ -175,7 +175,7 @@ function onEdgePropsConfirm({ weight, dir }) {
   showEdgeProps.value = false
 }
 
-/* ===== Node name popup (crear) ===== */
+/* ===== Node name popup (crear/editar) ===== */
 const showNodeName = ref(false)
 const nodeNameCtx = ref({ mode:'create', position:null, nodeId:null, defaultName:'Nodo' })
 function openNodeNameForCreate(position, defaultName='Nodo'){
@@ -192,8 +192,12 @@ function onNodeNameConfirm(name){
     const base = '#57c3d1'
     const id = nextId('n')
     cy.add({ group:'nodes', data:{ id, label:name, color:base, borderColor: darkenColor(base, 28) }, position })
+    const n = cy.$id(id)
+    resizeNodeToLabel(n)   // ⬅️ auto tamaño tras crear
   } else if (mode==='edit' && nodeId){
-    cy.$id(nodeId).data('label', name)
+    const n = cy.$id(nodeId)
+    n.data('label', name)
+    resizeNodeToLabel(n)   // ⬅️ auto tamaño tras renombrar
   }
   showNodeName.value = false
 }
@@ -209,8 +213,13 @@ function onNodePropsConfirm({ name, color }){
   const { nodeId } = nodePropsCtx.value
   const n = cy.$id(nodeId)
   if (n.empty()) return
-  if (name !== undefined) n.data('label', (name || '').trim())
-  if (color){ n.data({ color, borderColor: darkenColor(color, 28) }) }
+  if (name !== undefined) {
+    n.data('label', (name || '').trim())
+    resizeNodeToLabel(n)   // ⬅️ auto tamaño si cambió el nombre
+  }
+  if (color){
+    n.data({ color, borderColor: darkenColor(color, 28) })
+  }
   showNodeProps.value = false
 }
 
@@ -227,8 +236,10 @@ onMounted(() => {
         'shape':'ellipse', 'width':56, 'height':56,
         'background-color':'data(color)',
         'border-width':2, 'border-color':'data(borderColor)',
-        'label':'data(label)', 'color':'#0f1120', 'font-weight':700, 'font-size':12,
-        'text-valign':'center','text-halign':'center','text-wrap':'wrap','text-max-width':52,
+        'label':'data(label)', 'color':'#0f1120',
+        'font-family':'Poppins, sans-serif', 'font-weight':700, 'font-size':12,
+        'text-valign':'center','text-halign':'center',
+        'text-wrap':'wrap','text-max-width':52,
         'outline-width':0, 'overlay-opacity':0
       }},
       // Bloques de texto
@@ -264,7 +275,7 @@ onMounted(() => {
     if (deleteMode.value) {
       const isEdge = ele.isEdge()
       const isText = ele.isNode() && ele.hasClass('text-block')
-      const isGraphNode = ele.isNode() && !ele.hasClass('text-block')
+      const isGraphNode = ele.isNode() && !isText
       const tipo = isEdge ? 'arista' : (isText ? 'texto' : 'nodo')
       const detalle = isGraphNode ? 'Se eliminarán también sus aristas asociadas.' : (isText ? 'Se eliminará el bloque de texto.' : '')
       const nombre = isText ? (ele.data('text')?.toString().slice(0,40)||'Texto') : isGraphNode ? (ele.data('label')||'Nodo') : ''
@@ -329,6 +340,41 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => { cy?.destroy() })
+
+/* ===== Helpers de tamaño automático ===== */
+let _measureCtx = null
+function getMeasureCtx(){
+  if (!_measureCtx){
+    const c = document.createElement('canvas')
+    _measureCtx = c.getContext('2d')
+  }
+  return _measureCtx
+}
+
+/** Ajusta el tamaño del nodo para que el texto quepa de forma cómoda. */
+function resizeNodeToLabel(node){
+  if (!node || node.hasClass('text-block')) return
+  const label = (node.data('label') || '').toString()
+  const baseSize = 56         // tamaño mínimo usado en estilos
+  const paddingX = 24         // espacio extra a los lados
+  const maxW = 260            // límite para no crecer infinito
+
+  // Medir texto con misma fuente que Cytoscape
+  const ctx = getMeasureCtx()
+  ctx.font = '700 12px "Poppins", sans-serif'
+  const textW = Math.ceil(ctx.measureText(label || 'Nodo').width)
+
+  // Nuevo ancho: al menos base, a lo sumo maxW
+  const newW = Math.max(baseSize, Math.min(textW + paddingX, maxW))
+  // Altura: mantenemos base (ellipse queda bonita). Si quieres crecer con líneas, cámbialo aquí.
+  const newH = baseSize
+
+  // Aplicar al nodo
+  node.style('width', newW)
+  node.style('height', newH)
+  // Evita que haga wrap si ya cabe
+  node.style('text-max-width', Math.max(52, newW - 10))
+}
 
 /* ===== Helpers comunes ===== */
 function ensureEdge(source, target, weight){
@@ -497,9 +543,7 @@ async function getPdfBlobWithBg(){
     dataUrl = canvas.toDataURL('image/png')
     w = canvas.width; h = canvas.height
   } else {
-    // fallback: solo grafo
     dataUrl = cy.png({ full:true, scale: 2, bg: getBoardBg() })
-    // medir imagen para conservar proporción
     const dims = await new Promise(res => {
       const img = new Image()
       img.onload = () => res({ w: img.naturalWidth || img.width, h: img.naturalHeight || img.height })
@@ -539,7 +583,6 @@ async function exportPDF(){
     downloadBlob(`grafos-${stamp}.pdf`, pdfBlob)
     return
   }
-  // aviso si falta jspdf
   await Swal.fire({
     icon:'info',
     title:'Falta dependencia',
@@ -675,6 +718,9 @@ function loadFromSerializable(obj){
   cy.endBatch()
   cy.fit(undefined, 24)
   updateUidFromElements(nodes, edges)
+
+  // ⬅️ Ajustar tamaños de todos los nodos importados según su etiqueta
+  cy.nodes().forEach(n => resizeNodeToLabel(n))
 }
 
 async function importJSON(ev){
