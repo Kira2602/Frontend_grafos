@@ -11,7 +11,7 @@
             <i class="fa-solid fa-link"></i> Conectar
           </button>
           <button class="tool" :class="{ 'is-active': moveMode }" @click="toggleMoveMode">
-            <i class="fa-solid fa-hand"></i> Mover 
+            <i class="fa-solid fa-hand"></i> Mover
           </button>
           <button class="tool" :class="{ 'is-active': deleteMode }" @click="toggleDeleteMode">
             <i class="fa-solid fa-eraser"></i> Borrar
@@ -497,7 +497,7 @@ async function captureBoardCanvas(scale = 2){
     const mod = await import('html2canvas')
     html2canvas = mod.default || mod
   } catch (_) {
-    return null 
+    return null
   }
   const boardEl = boardRef.value
   if (!boardEl) return null
@@ -540,6 +540,7 @@ async function captureBoardCanvas(scale = 2){
 }
 
 /* ===== Render de matriz a canvas (para export) ===== */
+/*  >>> FIX: el ancho de columna ahora considera también el ancho de los títulos  */
 function renderMatrixCanvas(labels, matrix, { scale = 2 } = {}){
   const n = labels.length
   if (n === 0){
@@ -555,17 +556,24 @@ function renderMatrixCanvas(labels, matrix, { scale = 2 } = {}){
   // cálculo de anchos
   const tmp = document.createElement('canvas').getContext('2d')
   tmp.font = '700 14px Poppins, sans-serif'
-  const labelPad = 16
+  const rowLabelPad = 16        // padding para la primera columna (nombres de fila)
+  const colLabelPad = 12        // padding para cabeceras de columna
   const numPad   = 12
   const rowH = 28
   const headH = 32
 
+  // ancho de la columna izquierda (nombres de fila)
   let labelW = 42
-  labels.forEach(l => { labelW = Math.max(labelW, Math.ceil(tmp.measureText(String(l)).width) + labelPad) })
+  labels.forEach(l => { labelW = Math.max(labelW, Math.ceil(tmp.measureText(String(l)).width) + rowLabelPad) })
 
+  // ancho mínimo necesario para cada columna por: a) números; b) texto de cabecera
   let maxNumW = 28
   matrix.forEach(r => r.forEach(v => { maxNumW = Math.max(maxNumW, Math.ceil(tmp.measureText(String(v)).width) + numPad) }))
-  const numW = Math.max(28, maxNumW)
+
+  let maxHeaderW = 28
+  labels.forEach(l => { maxHeaderW = Math.max(maxHeaderW, Math.ceil(tmp.measureText(String(l)).width) + colLabelPad) })
+
+  const numW = Math.max(28, maxNumW, maxHeaderW) // <<--- aquí el cambio clave
 
   const w = labelW + n * numW
   const h = headH + n * rowH
@@ -604,8 +612,9 @@ function renderMatrixCanvas(labels, matrix, { scale = 2 } = {}){
   // cabeceras columnas
   ctx.font = '700 14px Poppins, sans-serif'
   for (let j=0;j<n;j++){
+    const text = String(labels[j])
     const x = labelW + j*numW + numW/2
-    ctx.fillText(String(labels[j]), x - ctx.measureText(String(labels[j])).width/2, headH/2)
+    ctx.fillText(text, x - ctx.measureText(text).width/2, headH/2)
   }
   // cabeceras filas
   for (let i=0;i<n;i++){
