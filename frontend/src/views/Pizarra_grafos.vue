@@ -57,6 +57,11 @@
         <button class="fab" @click.stop="showPicker = true" title="Cambiar estilo" type="button">
           <i class="fa-solid fa-palette"></i>
         </button>
+
+        <!-- FAB izquierda: Matriz -->
+        <button class="fab fab-left" title="Matriz de adyacencia" type="button" @click.stop="openMatriz">
+          <i class="fa-solid fa-table"></i>
+        </button>
       </div>
     </div>
 
@@ -87,13 +92,18 @@
       :default-name="nodeNameCtx.defaultName"
       @confirm="onNodeNameConfirm"
     />
-
-    <!-- Propiedades del nodo -->
     <NodePropsPopup
       v-model="showNodeProps"
       :default-name="nodePropsCtx.name"
       :default-color="nodePropsCtx.color"
       @confirm="onNodePropsConfirm"
+    />
+
+    <!-- Matriz de adyacencia -->
+    <MatrizPopup
+      v-model="showMatriz"
+      :nodes="matrizLabels"
+      :matrix="matrizValues"
     />
   </section>
 </template>
@@ -105,6 +115,7 @@ import ExportPopup from '@/components/ExportPopup.vue'
 import EdgePropsPopup from '@/components/EdgePropsPopup.vue'
 import NodeNamePopup from '@/components/NodeNamePopup.vue'
 import NodePropsPopup from '@/components/NodePropsPopup.vue'
+import MatrizPopup from '@/components/MatrizPopup.vue'
 import cytoscape from 'cytoscape'
 import Swal from 'sweetalert2'
 import 'sweetalert2/dist/sweetalert2.min.css'
@@ -192,11 +203,11 @@ function onNodeNameConfirm(name){
     const id = nextId('n')
     cy.add({ group:'nodes', data:{ id, label:name, color:base, borderColor: darkenColor(base, 28) }, position })
     const n = cy.$id(id)
-    resizeNodeToLabel(n)   // para ajustar tamaño
+    resizeNodeToLabel(n)
   } else if (mode==='edit' && nodeId){
     const n = cy.$id(nodeId)
     n.data('label', name)
-    resizeNodeToLabel(n)   
+    resizeNodeToLabel(n)
   }
   showNodeName.value = false
 }
@@ -214,7 +225,7 @@ function onNodePropsConfirm({ name, color }){
   if (n.empty()) return
   if (name !== undefined) {
     n.data('label', (name || '').trim())
-    resizeNodeToLabel(n)   // ⬅️ auto tamaño si cambió el nombre
+    resizeNodeToLabel(n)
   }
   if (color){
     n.data({ color, borderColor: darkenColor(color, 28) })
@@ -222,6 +233,40 @@ function onNodePropsConfirm({ name, color }){
   showNodeProps.value = false
 }
 
+/* ====== MATRIZ (popup y export) ====== */
+const showMatriz   = ref(false)
+const matrizLabels = ref([])
+const matrizValues = ref([])
+
+function computeAdjacency(){
+  if (!cy) return { labels: [], matrix: [] }
+
+  const list = cy.nodes().filter(n => !n.hasClass('text-block'))
+  const ordered = list.sort((a, b) =>
+    (a.data('label') || a.id()).localeCompare((b.data('label') || b.id()), 'es', { numeric: true, sensitivity: 'base' })
+  )
+
+  const labels = ordered.map(n => (n.data('label') || '').toString().trim() || n.id())
+  const idx = Object.fromEntries(ordered.map((n, i) => [n.id(), i]))
+
+  const n = ordered.length
+  const M = Array.from({ length: n }, () => Array(n).fill(0))
+  cy.edges().forEach(e => {
+    const s = idx[e.source().id()]
+    const t = idx[e.target().id()]
+    if (s == null || t == null) return
+    const w = Number(e.data('weight')) || 1
+    M[s][t] += w
+  })
+  return { labels, matrix: M }
+}
+
+function openMatriz () {
+  const { labels, matrix } = computeAdjacency()
+  matrizLabels.value = labels
+  matrizValues.value = matrix
+  showMatriz.value = true
+}
 
 onMounted(() => {
   cy = cytoscape({
@@ -229,18 +274,16 @@ onMounted(() => {
     layout: { name:'preset' },
     wheelSensitivity: 0.25, minZoom:0.1, maxZoom:3,
     style: [
-      // Nodos regulares con color por data()
       { selector:'node', style:{
         'shape':'ellipse', 'width':56, 'height':56,
         'background-color':'data(color)',
         'border-width':2, 'border-color':'data(borderColor)',
-        'label':'data(label)', 'color':'#0f1120', //color por defecto del texto nombre del nodo
+        'label':'data(label)', 'color':'#0f1120',
         'font-family':'Poppins, sans-serif', 'font-weight':700, 'font-size':12,
         'text-valign':'center','text-halign':'center',
         'text-wrap':'wrap','text-max-width':52,
         'outline-width':0, 'overlay-opacity':0
       }},
-      // Bloques de texto
       { selector:'node.text-block', style:{
         'shape':'round-rectangle','width':28,'height':20,'background-opacity':0,'border-width':0,
         'label':'data(text)','color':'#e7e7ec','font-size':13,'font-weight':600,'text-wrap':'wrap','text-max-width':220,
@@ -248,16 +291,14 @@ onMounted(() => {
       }},
       { selector:'node:selected', style:{ 'border-color':'#ffffff', 'overlay-color':'#ffffff', 'overlay-opacity':0.18, 'overlay-padding':6 }},
       { selector:'node.edge-pending', style:{ 'overlay-color':'#567c8d', 'overlay-opacity':0.25, 'overlay-padding':8 }},
-      // Aristas
       { selector:'edge', style:{
         'width':2, 'line-color':'#000000','target-arrow-color':'#000000','target-arrow-shape':'triangle',
         'curve-style':'bezier','label':'data(weight)','text-background-color':'#2c2f3a','text-background-opacity':0.85,'text-background-padding':2,'text-rotation':'autorotate','font-size':12,'color':'#ffffff'
       }},
-      { selector:'edge:selected', style:{ 'line-color':'#000000','target-arrow-color':'#000000','width':3 }} //cambia de color al seleccionar 
+      { selector:'edge:selected', style:{ 'line-color':'#000000','target-arrow-color':'#000000','width':3 }}
     ]
   })
 
-  // Clic en fondo: crear nodo / texto
   cy.on('tap', (evt) => {
     if (evt.target !== cy) return
     if (nodeMode.value){ openNodeNameForCreate(evt.position, 'Nodo'); return }
@@ -265,11 +306,8 @@ onMounted(() => {
     if (connectMode.value && connectFromId) clearPendingConnect()
   })
 
-  // Tap sobre elementos
   cy.on('tap', 'node,edge', async (evt) => {
     const ele = evt.target
-
-    // BORRAR (detecta tipo)
     if (deleteMode.value) {
       const isEdge = ele.isEdge()
       const isText = ele.isNode() && ele.hasClass('text-block')
@@ -287,7 +325,6 @@ onMounted(() => {
       return
     }
 
-    // CONECTAR / editar aristas
     if (connectMode.value) {
       if (ele.isEdge() && isDoubleTap(ele.id())) {
         const sId = ele.source().id(), tId = ele.target().id()
@@ -306,25 +343,21 @@ onMounted(() => {
       return
     }
 
-    // CLICK en nodo normal => abrir propiedades (nombre + color)
     if (ele.isNode() && !ele.hasClass('text-block')) {
       openNodeProps(ele)
       return
     }
 
-    // DOBLE CLIC en bloque de texto => editar texto
     if (ele.isNode() && ele.hasClass('text-block') && isDoubleTap(ele.id())) {
       await editTextNode(ele)
     }
 
-    // DOBLE CLIC en arista (fuera de conectar) => propiedades
     if (ele.isEdge() && isDoubleTap(ele.id())) {
       const sId = ele.source().id(), tId = ele.target().id()
       openEdgeProps({ sId, tId, editId: ele.id(), defaultWeight: ele.data('weight')??'1', initialDir:'forward' })
     }
   })
 
-  // ESC
   const onKey = (e) => {
     if (e.key === 'Escape') {
       nodeMode.value = connectMode.value = deleteMode.value = moveMode.value = textMode.value = false
@@ -348,13 +381,12 @@ function getMeasureCtx(){
   return _measureCtx
 }
 
-/** Ajusta el tamaño del nodo para que el texto quepa de forma cómoda. */
 function resizeNodeToLabel(node){
   if (!node || node.hasClass('text-block')) return
   const label = (node.data('label') || '').toString()
-  const baseSize = 56         // tamaño mínimo
-  const paddingX = 24         // espacio extra a los lados
-  const maxW = 260            // límite para no crecer infinito
+  const baseSize = 56
+  const paddingX = 24
+  const maxW = 260
 
   const ctx = getMeasureCtx()
   ctx.font = '700 12px "Poppins", sans-serif'
@@ -507,58 +539,180 @@ async function captureBoardCanvas(scale = 2){
   }
 }
 
-async function getPngBlobWithBg(){
-  const canvas = await captureBoardCanvas(2)
-  if (canvas) return await canvasToBlob(canvas, 'image/png')
-  return await cyPngBlob({ scale: 2 })
+/* ===== Render de matriz a canvas (para export) ===== */
+function renderMatrixCanvas(labels, matrix, { scale = 2 } = {}){
+  const n = labels.length
+  if (n === 0){
+    const c = document.createElement('canvas')
+    c.width = 600; c.height = 140
+    const ctx = c.getContext('2d')
+    ctx.fillStyle = '#2c2f3a'; ctx.fillRect(0,0,c.width,c.height)
+    ctx.fillStyle = '#e7e7ec'; ctx.font = '700 18px Poppins, sans-serif'
+    ctx.fillText('Matriz de adyacencia (vacía)', 16, 70)
+    return c
+  }
+
+  // cálculo de anchos
+  const tmp = document.createElement('canvas').getContext('2d')
+  tmp.font = '700 14px Poppins, sans-serif'
+  const labelPad = 16
+  const numPad   = 12
+  const rowH = 28
+  const headH = 32
+
+  let labelW = 42
+  labels.forEach(l => { labelW = Math.max(labelW, Math.ceil(tmp.measureText(String(l)).width) + labelPad) })
+
+  let maxNumW = 28
+  matrix.forEach(r => r.forEach(v => { maxNumW = Math.max(maxNumW, Math.ceil(tmp.measureText(String(v)).width) + numPad) }))
+  const numW = Math.max(28, maxNumW)
+
+  const w = labelW + n * numW
+  const h = headH + n * rowH
+
+  const c = document.createElement('canvas')
+  c.width = Math.round(w * scale)
+  c.height = Math.round(h * scale)
+  const ctx = c.getContext('2d')
+  ctx.scale(scale, scale)
+
+  // fondos
+  ctx.fillStyle = '#2c2f3a'; ctx.fillRect(0,0,w,h)
+  ctx.fillStyle = '#3a3f4e'; ctx.fillRect(0,0,w,headH)               // header columnas
+  ctx.fillRect(0,0,labelW,h)                                        // columna de filas + esquina
+
+  // bordes
+  ctx.strokeStyle = 'rgba(255,255,255,.14)'
+  ctx.lineWidth = 1
+  // verticales
+  for (let j=0;j<=n;j++){
+    const x = Math.floor(labelW + j*numW) + .5
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke()
+  }
+  // horizontales
+  for (let i=0;i<=n;i++){
+    const y = Math.floor(headH + i*rowH) + .5
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke()
+  }
+  // borde columna izquierda y header
+  ctx.beginPath(); ctx.moveTo(.5, 0); ctx.lineTo(.5, h); ctx.stroke()
+  ctx.beginPath(); ctx.moveTo(0, .5); ctx.lineTo(w, .5); ctx.stroke()
+
+  // textos
+  ctx.fillStyle = '#e7e7ec'
+  ctx.textBaseline = 'middle'
+  // cabeceras columnas
+  ctx.font = '700 14px Poppins, sans-serif'
+  for (let j=0;j<n;j++){
+    const x = labelW + j*numW + numW/2
+    ctx.fillText(String(labels[j]), x - ctx.measureText(String(labels[j])).width/2, headH/2)
+  }
+  // cabeceras filas
+  for (let i=0;i<n;i++){
+    const y = headH + i*rowH + rowH/2
+    ctx.fillText(String(labels[i]), 8, y) // left-align
+  }
+  // celdas
+  ctx.font = '600 14px Poppins, sans-serif'
+  for (let i=0;i<n;i++){
+    for (let j=0;j<n;j++){
+      const val = String(matrix[i][j])
+      const x = labelW + j*numW + numW/2
+      const y = headH + i*rowH + rowH/2
+      ctx.fillText(val, x - ctx.measureText(val).width/2, y)
+    }
+  }
+
+  return c
 }
 
-async function getPdfBlobWithBg(){
+/* Composición vertical */
+function composeVerticalCanvas(topCanvas, bottomCanvas, gap = 16){
+  const w = Math.max(topCanvas.width, bottomCanvas.width)
+  const h = topCanvas.height + gap + bottomCanvas.height
+  const c = document.createElement('canvas')
+  c.width = w
+  c.height = h
+  const ctx = c.getContext('2d')
+
+  // fondo con color de pizarra (por si hay transparencias)
+  ctx.fillStyle = getBoardBg()
+  ctx.fillRect(0,0,w,h)
+
+  const topX = Math.round((w - topCanvas.width)/2)
+  const bottomX = Math.round((w - bottomCanvas.width)/2)
+  ctx.drawImage(topCanvas, topX, 0)
+  ctx.drawImage(bottomCanvas, bottomX, topCanvas.height + gap)
+  return c
+}
+
+/* Obtener canvas de la pizarra (si no hay html2canvas, uso cy.png) */
+async function getBoardCanvas(){
+  const canvas = await captureBoardCanvas(2)
+  if (canvas) return canvas
+  // Fallback: usar cy.png -> canvas
+  const dataUrl = cy.png({ full:true, scale: 2, bg: getBoardBg() })
+  const img = await new Promise(res => {
+    const i = new Image()
+    i.onload = () => res(i)
+    i.src = dataUrl
+  })
+  const c = document.createElement('canvas')
+  c.width = img.naturalWidth || img.width
+  c.height = img.naturalHeight || img.height
+  c.getContext('2d').drawImage(img,0,0)
+  return c
+}
+
+async function getCompositePngBlob(){
+  const boardCanvas = await getBoardCanvas()
+  const { labels, matrix } = computeAdjacency()
+  const matCanvas = renderMatrixCanvas(labels, matrix, { scale: 2 })
+  const composed = composeVerticalCanvas(boardCanvas, matCanvas, 18)
+  return await canvasToBlob(composed, 'image/png')
+}
+
+async function getPdfBlobWithMatrix(){
   let jsPDFmod = null
   try { jsPDFmod = await import('jspdf') } catch (_) {}
   if (!jsPDFmod?.jsPDF) return null
+  const { jsPDF } = jsPDFmod
 
-  const canvas = await captureBoardCanvas(2)
-  let dataUrl, w, h
-  if (canvas){
-    dataUrl = canvas.toDataURL('image/png')
-    w = canvas.width; h = canvas.height
-  } else {
-    dataUrl = cy.png({ full:true, scale: 2, bg: getBoardBg() })
-    const dims = await new Promise(res => {
-      const img = new Image()
-      img.onload = () => res({ w: img.naturalWidth || img.width, h: img.naturalHeight || img.height })
-      img.src = dataUrl
-    })
-    w = dims.w; h = dims.h
+  const boardCanvas = await getBoardCanvas()
+  const { labels, matrix } = computeAdjacency()
+  const matCanvas = renderMatrixCanvas(labels, matrix, { scale: 2 })
+
+  // Crear PDF y poner pizarra en página 1
+  const doc = new jsPDF({ orientation: boardCanvas.width >= boardCanvas.height ? 'l' : 'p', unit: 'pt', compress: true })
+  const margin = 24
+  const addCanvasAsImage = (canvas) => {
+    const pageW = doc.internal.pageSize.getWidth()
+    const pageH = doc.internal.pageSize.getHeight()
+    const w = canvas.width
+    const h = canvas.height
+    const scale = Math.min((pageW - margin*2)/w, (pageH - margin*2)/h)
+    const imgW = w * scale, imgH = h * scale
+    const x = (pageW - imgW)/2, y = (pageH - imgH)/2
+    doc.addImage(canvas.toDataURL('image/png'), 'PNG', x, y, imgW, imgH)
   }
 
-  const { jsPDF } = jsPDFmod
-  const orientation = w >= h ? 'l' : 'p'
-  const doc = new jsPDF({ orientation, unit:'pt', compress:true })
-  const pageW = doc.internal.pageSize.getWidth()
-  const pageH = doc.internal.pageSize.getHeight()
-  const margin = 24
-  const scale = Math.min((pageW - margin*2)/w, (pageH - margin*2)/h)
-  const imgW = w * scale, imgH = h * scale
-  const x = (pageW - imgW)/2, y = (pageH - imgH)/2
-  doc.addImage(dataUrl, 'PNG', x, y, imgW, imgH)
+  addCanvasAsImage(boardCanvas)
+  // Segunda página: matriz
+  doc.addPage()
+  addCanvasAsImage(matCanvas)
+
   return doc.output('blob')
 }
 
-function getJsonBlob(){
-  const json = serializeGraph()
-  return new Blob([JSON.stringify(json, null, 2)], { type:'application/json' })
-}
-
+/* Exportar con matriz incluida */
 async function exportImagen(){
-  const blob = await getPngBlobWithBg()
+  const blob = await getCompositePngBlob()
   const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')
   downloadBlob(`grafos-${stamp}.png`, blob)
 }
 
 async function exportPDF(){
-  const pdfBlob = await getPdfBlobWithBg()
+  const pdfBlob = await getPdfBlobWithMatrix()
   if (pdfBlob){
     const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')
     downloadBlob(`grafos-${stamp}.pdf`, pdfBlob)
@@ -572,18 +726,12 @@ async function exportPDF(){
   })
 }
 
-async function exportJSON(){
-  try{
-    const blob = getJsonBlob()
-    const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')
-    downloadBlob(`grafos-${stamp}.json`, blob)
-  }catch(e){
-    console.error(e)
-    Swal.fire({ icon:'error', title:'No se pudo exportar el JSON', text:'Ocurrió un error al serializar el grafo.', ...swalColors })
-  }
+function getJsonBlob(){
+  const json = serializeGraph()
+  return new Blob([JSON.stringify(json, null, 2)], { type:'application/json' })
 }
 
-/* === NUEVO: exportar ZIP con PNG + PDF + JSON === */
+/* === ZIP ahora usa exportaciones con matriz === */
 async function exportZIP(){
   let JSZipMod = null
   try { JSZipMod = await import('jszip') } catch (_) {}
@@ -600,29 +748,30 @@ async function exportZIP(){
   const zip = new JSZip()
   const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')
 
-  // PNG
-  const pngBlob = await getPngBlobWithBg()
+  // PNG (compuesto)
+  const pngBlob = await getCompositePngBlob()
   zip.file(`grafos-${stamp}.png`, pngBlob)
 
   // JSON
   const jsonBlob = getJsonBlob()
   zip.file(`grafos-${stamp}.json`, jsonBlob)
 
-  // PDF 
-  const pdfBlob = await getPdfBlobWithBg()
+  // PDF (dos páginas: pizarra + matriz)
+  const pdfBlob = await getPdfBlobWithMatrix()
   if (pdfBlob) {
     zip.file(`grafos-${stamp}.pdf`, pdfBlob)
   } else {
     zip.file('LEEME.txt',
       'No se incluyó el PDF porque no se encontró la librería "jspdf".\n' +
       'Instala: npm i jspdf html2canvas\n' +
-      'El ZIP contiene PNG y JSON correctamente.\n')
+      'El ZIP contiene PNG (con matriz) y JSON correctamente.\n')
   }
 
   const zipBlob = await zip.generateAsync({ type: 'blob' })
   downloadBlob(`grafos-${stamp}.zip`, zipBlob)
 }
 
+/* ===== serialización / carga ===== */
 function serializeGraph(){
   const nodes = cy.nodes().map(n => ({
     id: n.id(),
@@ -810,6 +959,7 @@ $shadow: 0 10px 24px rgba(0,0,0,.25);
 
   .fab { position:absolute; right:14px; bottom:14px; width:44px; height:44px; border-radius:999px; border:none; background:#567c8d; color:#ecebe6; display:grid; place-items:center; cursor:pointer; box-shadow:0 8px 22px rgba(0,0,0,.35); transition: transform .06s, filter .2s; &:hover{filter:brightness(1.05)} &:active{ transform: translateY(1px); } z-index:20; pointer-events:auto; }
   .fab-clear{ bottom:68px; background:#2f4156; z-index:25; }
+  .fab-left{ left:14px; right:auto; } /* Botón de matriz a la izquierda */
   &.no-grid { background-image: none !important; }
 }
 
