@@ -105,6 +105,14 @@
       :nodes="matrizLabels"
       :matrix="matrizValues"
     />
+
+    <!-- Popup: nombre de archivo -->
+    <NombreArchivoPopup
+      v-model="showNamePopup"
+      :default-name="suggestedBaseName"
+      :ext="fileExtForType"
+      @confirm="onNameConfirm"
+    />
   </section>
 </template>
 
@@ -116,6 +124,7 @@ import EdgePropsPopup from '@/components/EdgePropsPopup.vue'
 import NodeNamePopup from '@/components/NodeNamePopup.vue'
 import NodePropsPopup from '@/components/NodePropsPopup.vue'
 import MatrizPopup from '@/components/MatrizPopup.vue'
+import NombreArchivoPopup from '@/components/NombreArchivoPopup.vue'
 import cytoscape from 'cytoscape'
 import Swal from 'sweetalert2'
 import 'sweetalert2/dist/sweetalert2.min.css'
@@ -268,6 +277,7 @@ function openMatriz () {
   showMatriz.value = true
 }
 
+/* ===================== CY INIT ===================== */
 onMounted(() => {
   cy = cytoscape({
     container: cyRef.value,
@@ -372,6 +382,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => { cy?.destroy() })
 
+/* ===================== UTILES ===================== */
 let _measureCtx = null
 function getMeasureCtx(){
   if (!_measureCtx){
@@ -539,8 +550,8 @@ async function captureBoardCanvas(scale = 2){
   }
 }
 
-/* ===== Render de matriz a canvas (para export) ===== */
-/*  >>> FIX: el ancho de columna ahora considera también el ancho de los títulos  */
+/* ===== Render de matriz a canvas (para export) =====
+   >>> FIX: columnas consideran también ancho de títulos */
 function renderMatrixCanvas(labels, matrix, { scale = 2 } = {}){
   const n = labels.length
   if (n === 0){
@@ -556,24 +567,22 @@ function renderMatrixCanvas(labels, matrix, { scale = 2 } = {}){
   // cálculo de anchos
   const tmp = document.createElement('canvas').getContext('2d')
   tmp.font = '700 14px Poppins, sans-serif'
-  const rowLabelPad = 16        // padding para la primera columna (nombres de fila)
-  const colLabelPad = 12        // padding para cabeceras de columna
+  const rowLabelPad = 16
+  const colLabelPad = 12
   const numPad   = 12
   const rowH = 28
   const headH = 32
 
-  // ancho de la columna izquierda (nombres de fila)
   let labelW = 42
   labels.forEach(l => { labelW = Math.max(labelW, Math.ceil(tmp.measureText(String(l)).width) + rowLabelPad) })
 
-  // ancho mínimo necesario para cada columna por: a) números; b) texto de cabecera
   let maxNumW = 28
   matrix.forEach(r => r.forEach(v => { maxNumW = Math.max(maxNumW, Math.ceil(tmp.measureText(String(v)).width) + numPad) }))
 
   let maxHeaderW = 28
   labels.forEach(l => { maxHeaderW = Math.max(maxHeaderW, Math.ceil(tmp.measureText(String(l)).width) + colLabelPad) })
 
-  const numW = Math.max(28, maxNumW, maxHeaderW) // <<--- aquí el cambio clave
+  const numW = Math.max(28, maxNumW, maxHeaderW)
 
   const w = labelW + n * numW
   const h = headH + n * rowH
@@ -586,42 +595,36 @@ function renderMatrixCanvas(labels, matrix, { scale = 2 } = {}){
 
   // fondos
   ctx.fillStyle = '#2c2f3a'; ctx.fillRect(0,0,w,h)
-  ctx.fillStyle = '#3a3f4e'; ctx.fillRect(0,0,w,headH)               // header columnas
-  ctx.fillRect(0,0,labelW,h)                                        // columna de filas + esquina
+  ctx.fillStyle = '#3a3f4e'; ctx.fillRect(0,0,w,headH)
+  ctx.fillRect(0,0,labelW,h)
 
   // bordes
   ctx.strokeStyle = 'rgba(255,255,255,.14)'
   ctx.lineWidth = 1
-  // verticales
   for (let j=0;j<=n;j++){
     const x = Math.floor(labelW + j*numW) + .5
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke()
   }
-  // horizontales
   for (let i=0;i<=n;i++){
     const y = Math.floor(headH + i*rowH) + .5
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke()
   }
-  // borde columna izquierda y header
   ctx.beginPath(); ctx.moveTo(.5, 0); ctx.lineTo(.5, h); ctx.stroke()
   ctx.beginPath(); ctx.moveTo(0, .5); ctx.lineTo(w, .5); ctx.stroke()
 
   // textos
   ctx.fillStyle = '#e7e7ec'
   ctx.textBaseline = 'middle'
-  // cabeceras columnas
   ctx.font = '700 14px Poppins, sans-serif'
   for (let j=0;j<n;j++){
     const text = String(labels[j])
     const x = labelW + j*numW + numW/2
     ctx.fillText(text, x - ctx.measureText(text).width/2, headH/2)
   }
-  // cabeceras filas
   for (let i=0;i<n;i++){
     const y = headH + i*rowH + rowH/2
-    ctx.fillText(String(labels[i]), 8, y) // left-align
+    ctx.fillText(String(labels[i]), 8, y)
   }
-  // celdas
   ctx.font = '600 14px Poppins, sans-serif'
   for (let i=0;i<n;i++){
     for (let j=0;j<n;j++){
@@ -644,7 +647,6 @@ function composeVerticalCanvas(topCanvas, bottomCanvas, gap = 16){
   c.height = h
   const ctx = c.getContext('2d')
 
-  // fondo con color de pizarra (por si hay transparencias)
   ctx.fillStyle = getBoardBg()
   ctx.fillRect(0,0,w,h)
 
@@ -659,7 +661,6 @@ function composeVerticalCanvas(topCanvas, bottomCanvas, gap = 16){
 async function getBoardCanvas(){
   const canvas = await captureBoardCanvas(2)
   if (canvas) return canvas
-  // Fallback: usar cy.png -> canvas
   const dataUrl = cy.png({ full:true, scale: 2, bg: getBoardBg() })
   const img = await new Promise(res => {
     const i = new Image()
@@ -673,6 +674,22 @@ async function getBoardCanvas(){
   return c
 }
 
+/* ========= Nombre de archivo ========= */
+const showNamePopup = ref(false)
+const pendingExportType = ref(null)
+const fileExtForType = computed(() => {
+  return pendingExportType.value === 'image' ? 'png'
+    : pendingExportType.value === 'pdf' ? 'pdf'
+    : pendingExportType.value === 'json' ? 'json'
+    : pendingExportType.value === 'zip'  ? 'zip'
+    : 'png'
+})
+function defaultBaseName(){
+  return `grafos-${new Date().toISOString().slice(0,16).replace(/[:T]/g,'-')}`
+}
+const suggestedBaseName = computed(() => defaultBaseName())
+
+/* ========= Exportar con nombre ========= */
 async function getCompositePngBlob(){
   const boardCanvas = await getBoardCanvas()
   const { labels, matrix } = computeAdjacency()
@@ -691,7 +708,6 @@ async function getPdfBlobWithMatrix(){
   const { labels, matrix } = computeAdjacency()
   const matCanvas = renderMatrixCanvas(labels, matrix, { scale: 2 })
 
-  // Crear PDF y poner pizarra en página 1
   const doc = new jsPDF({ orientation: boardCanvas.width >= boardCanvas.height ? 'l' : 'p', unit: 'pt', compress: true })
   const margin = 24
   const addCanvasAsImage = (canvas) => {
@@ -706,25 +722,21 @@ async function getPdfBlobWithMatrix(){
   }
 
   addCanvasAsImage(boardCanvas)
-  // Segunda página: matriz
   doc.addPage()
   addCanvasAsImage(matCanvas)
 
   return doc.output('blob')
 }
 
-/* Exportar con matriz incluida */
-async function exportImagen(){
+async function exportImagen(base){
   const blob = await getCompositePngBlob()
-  const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')
-  downloadBlob(`grafos-${stamp}.png`, blob)
+  downloadBlob(`${base || defaultBaseName()}.png`, blob)
 }
 
-async function exportPDF(){
+async function exportPDF(base){
   const pdfBlob = await getPdfBlobWithMatrix()
   if (pdfBlob){
-    const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')
-    downloadBlob(`grafos-${stamp}.pdf`, pdfBlob)
+    downloadBlob(`${base || defaultBaseName()}.pdf`, pdfBlob)
     return
   }
   await Swal.fire({
@@ -739,9 +751,12 @@ function getJsonBlob(){
   const json = serializeGraph()
   return new Blob([JSON.stringify(json, null, 2)], { type:'application/json' })
 }
+async function exportJSON(base){
+  const blob = getJsonBlob()
+  downloadBlob(`${base || defaultBaseName()}.json`, blob)
+}
 
-/* === ZIP ahora usa exportaciones con matriz === */
-async function exportZIP(){
+async function exportZIP(base){
   let JSZipMod = null
   try { JSZipMod = await import('jszip') } catch (_) {}
   if (!JSZipMod?.default){
@@ -755,20 +770,20 @@ async function exportZIP(){
   }
   const JSZip = JSZipMod.default
   const zip = new JSZip()
-  const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')
+  const baseName = base || defaultBaseName()
 
   // PNG (compuesto)
   const pngBlob = await getCompositePngBlob()
-  zip.file(`grafos-${stamp}.png`, pngBlob)
+  zip.file(`${baseName}.png`, pngBlob)
 
   // JSON
   const jsonBlob = getJsonBlob()
-  zip.file(`grafos-${stamp}.json`, jsonBlob)
+  zip.file(`${baseName}.json`, jsonBlob)
 
   // PDF (dos páginas: pizarra + matriz)
   const pdfBlob = await getPdfBlobWithMatrix()
   if (pdfBlob) {
-    zip.file(`grafos-${stamp}.pdf`, pdfBlob)
+    zip.file(`${baseName}.pdf`, pdfBlob)
   } else {
     zip.file('LEEME.txt',
       'No se incluyó el PDF porque no se encontró la librería "jspdf".\n' +
@@ -777,7 +792,7 @@ async function exportZIP(){
   }
 
   const zipBlob = await zip.generateAsync({ type: 'blob' })
-  downloadBlob(`grafos-${stamp}.zip`, zipBlob)
+  downloadBlob(`${baseName}.zip`, zipBlob)
 }
 
 /* ===== serialización / carga ===== */
@@ -888,12 +903,21 @@ async function importJSON(ev){
   }
 }
 
+/* ========= Flujo de exportación ========= */
 const handleExport = async (type) => {
-  if (type === 'image') await exportImagen()
-  else if (type === 'pdf') await exportPDF()
-  else if (type === 'json') await exportJSON()
-  else if (type === 'zip') await exportZIP()
+  // Elegiste tipo en ExportPopup → abre popup de nombre
+  pendingExportType.value = type
   showExport.value = false
+  showNamePopup.value = true
+}
+async function onNameConfirm(base){
+  showNamePopup.value = false
+  const type = pendingExportType.value
+  pendingExportType.value = null
+  if (type === 'image') await exportImagen(base)
+  else if (type === 'pdf') await exportPDF(base)
+  else if (type === 'json') await exportJSON(base)
+  else if (type === 'zip') await exportZIP(base)
 }
 
 function toggleNodeMode(){ nodeMode.value=!nodeMode.value; if(nodeMode.value){ connectMode.value=deleteMode.value=moveMode.value=textMode.value=false } applyGrabRules() }
