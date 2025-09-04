@@ -27,7 +27,7 @@ const emit = defineEmits(['close'])
           <div class="video-wrapper">
             <iframe
               class="yt"
-              src="https://www.youtube.com/embed/ALr2hemaNlk?rel=0&modestbranding=1&playsinline=1"
+              src="https://www.youtube.com/embed/ZDfQM-VOog4?rel=0&modestbranding=1&playsinline=1"
               title="YouTube video"
               frameborder="0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
@@ -40,7 +40,7 @@ const emit = defineEmits(['close'])
           <div class="actions">
             <a
               class="yt-button"
-              href="https://www.youtube.com/watch?v=ALr2hemaNlk"
+              href="https://youtu.be/ZDfQM-VOog4"
               target="_blank"
               rel="noopener"
             >
