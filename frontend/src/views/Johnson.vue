@@ -7,6 +7,18 @@
           <button class="tool" :class="{ 'is-active': nodeMode }" @click="toggleNodeMode">
             <i class="fa-regular fa-circle"></i> Nodo
           </button>
+          <button class="tool" :class="{ 'is-active': connectMode }" @click="toggleConnectMode">
+            <i class="fa-solid fa-link"></i> Conectar
+          </button>
+          <button class="tool" :class="{ 'is-active': moveMode }" @click="toggleMoveMode">
+            <i class="fa-solid fa-hand"></i> Mover
+          </button>
+          <button class="tool" :class="{ 'is-active': deleteMode }" @click="toggleDeleteMode">
+            <i class="fa-solid fa-eraser"></i> Borrar
+          </button>
+          <button class="tool" :class="{ 'is-active': textMode }" @click="toggleTextMode">
+            <i class="fa-solid fa-pen"></i> Texto
+          </button>
         </div>
 
         <div class="tools-right">
@@ -1042,57 +1054,30 @@ async function exportZIP(base){
   downloadBlob(`${baseName}.zip`, zipBlob)
 }
 
-/* ===== serialización / carga (MEJORADAS) ===== */
+/* ===== serialización / carga ===== */
 function serializeGraph(){
-  const toStr = v => (v == null ? '' : String(v))
-
-  // Formato estilo Cytoscape (elements.*)
-  const elementsNodes = cy.nodes().map(n => ({
-    data: {
-      id: toStr(n.id()),
-      label: toStr(n.data('label') ?? ''),
-      color: toStr(n.data('color') ?? '#57c3d1'),
-      borderColor: toStr(n.data('borderColor') ?? '#167293'),
-      text: n.hasClass('text-block') ? toStr(n.data('text') ?? '') : undefined,
-    },
-    position: n.position(),
-    classes: n.classes()
+  const nodes = cy.nodes().map(n => ({
+    id: n.id(),
+    label: n.data('label') ?? '',
+    color: n.data('color') ?? '#57c3d1',
+    borderColor: n.data('borderColor') ?? '#167293',
+    text: n.hasClass('text-block') ? (n.data('text') ?? '') : undefined,
+    classes: n.classes(),
+    position: n.position()
   }))
-
-  const elementsEdges = cy.edges().map(e => ({
-    data: {
-      id: toStr(e.id()),
-      source: toStr(e.source().id()),
-      target: toStr(e.target().id()),
-      weight: toStr(e.data('weight') ?? '')
-    },
+  const edges = cy.edges().map(e => ({
+    id: e.id(),
+    source: e.source().id(),
+    target: e.target().id(),
+    // 👇 fuerza string y conserva multilínea
+    weight: String(e.data('weight') ?? ''),
+    // 👇 exporta clases (critical/highlight/etc.)
     classes: e.classes()
   }))
-
-  // Formato "plano" (graph.*) para compatibilidad
-  const graphNodes = elementsNodes.map(n => ({
-    id: n.data.id,
-    label: n.data.label,
-    color: n.data.color,
-    borderColor: n.data.borderColor,
-    text: n.data.text,
-    classes: n.classes,
-    position: n.position
-  }))
-
-  const graphEdges = elementsEdges.map(e => ({
-    id: e.data.id,
-    source: e.data.source,
-    target: e.data.target,
-    weight: e.data.weight,
-    classes: e.classes
-  }))
-
   return {
-    meta: { version: 2, exportedAt: new Date().toISOString() },
+    meta: { version: 1, exportedAt: new Date().toISOString() },
     board: { theme: theme.value, color: color.value, image: image.value, showGrid: showGrid.value },
-    graph: { nodes: graphNodes, edges: graphEdges },
-    elements: { nodes: elementsNodes, edges: elementsEdges }
+    graph: { nodes, edges }
   }
 }
 
@@ -1100,75 +1085,22 @@ function updateUidFromElements(nodes = [], edges = []){
   let maxNum = uid
   const rx = /(\d+)$/
   ;[...nodes, ...edges].forEach(el => {
-    // Soporta {id} o {data:{id}}
-    const id = (el && (el.id || el?.data?.id)) || ''
-    const m = String(id).match(rx)
+    const m = (el.id || '').match(rx)
     if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10) + 1)
   })
   uid = Math.max(uid, maxNum)
 }
 
 function loadFromSerializable(obj){
-  // Normaliza a estructura "elements" (nodos y aristas con data/position/classes)
-  let elements = null
+  const g = obj?.graph || obj?.elements || obj
+  if (!g) throw new Error('Estructura inválida')
 
-  if (obj?.elements?.nodes && obj?.elements?.edges) {
-    elements = { nodes: obj.elements.nodes, edges: obj.elements.edges }
-  } else if (obj?.graph?.nodes && obj?.graph?.edges) {
-    elements = {
-      nodes: obj.graph.nodes.map(n => ({
-        data: {
-          id: String(n.id),
-          label: String(n.label ?? ''),
-          color: String(n.color ?? '#57c3d1'),
-          borderColor: String(n.borderColor ?? darkenColor(n.color ?? '#57c3d1', 28)),
-          text: n.text != null ? String(n.text) : undefined
-        },
-        position: n.position || { x: 0, y: 0 },
-        classes: (n.classes || '').toString()
-      })),
-      edges: obj.graph.edges.map(e => ({
-        data: {
-          id: String(e.id ?? `e_${e.source}_${e.target}_${Date.now()}`),
-          source: String(e.source),
-          target: String(e.target),
-          weight: String(e.weight ?? '')
-        },
-        classes: (e.classes || '').toString()
-      }))
-    }
-  } else if (Array.isArray(obj?.nodes) && Array.isArray(obj?.edges)) {
-    // Compatibilidad con esquema plano {nodes, edges}
-    elements = {
-      nodes: obj.nodes.map(n => ({
-        data: {
-          id: String(n.id),
-          label: String(n.label ?? ''),
-          color: String(n.color ?? '#57c3d1'),
-          borderColor: String(n.borderColor ?? darkenColor(n.color ?? '#57c3d1', 28)),
-          text: n.text != null ? String(n.text) : undefined
-        },
-        position: n.position || { x: 0, y: 0 },
-        classes: (n.classes || '').toString()
-      })),
-      edges: obj.edges.map(e => ({
-        data: {
-          id: String(e.id ?? `e_${e.source}_${e.target}_${Date.now()}`),
-          source: String(e.source),
-          target: String(e.target),
-          weight: String(e.weight ?? '')
-        },
-        classes: (e.classes || '').toString()
-      }))
-    }
-  }
-
-  if (!elements?.nodes || !elements?.edges) throw new Error('Estructura inválida')
+  const nodes = g.nodes || g?.elements?.nodes || []
+  const edges = g.edges || g?.elements?.edges || []
 
   cy.startBatch()
   cy.elements().remove()
 
-  // Restaura estado visual del tablero si viene
   if (obj?.board){
     theme.value = obj.board.theme ?? theme.value
     color.value = obj.board.color ?? color.value
@@ -1176,24 +1108,42 @@ function loadFromSerializable(obj){
     showGrid.value = obj.board.showGrid ?? showGrid.value
   }
 
-  // Agregar nodos primero
-  elements.nodes.forEach(n => {
-    cy.add({ group:'nodes', data:n.data, position:n.position, classes:n.classes })
+  // --- NODOS ---
+  nodes.forEach(n => {
+    const data = n.data ? n.data : {
+      id: n.id,
+      label: n.label ?? '',
+      color: n.color ?? '#57c3d1',
+      borderColor: n.borderColor ?? darkenColor(n.color ?? '#57c3d1', 28),
+      text: n.text
+    }
+    const position = n.position || n?.data?.position || n?.pos || { x: 0, y: 0 }
+    const classes = (n.classes || n?.data?.classes || '').toString()
+    cy.add({ group:'nodes', data, position, classes })
   })
 
-  // Luego aristas; descartar si faltan extremos
-  elements.edges.forEach(e => {
-    const d = e.data || {}
-    const src = d.source, tgt = d.target
-    if (!src || !tgt) return
-    if (cy.$id(src).empty() || cy.$id(tgt).empty()) return
-    cy.add({ group:'edges', data:d, classes:e.classes })
+  // --- ARISTAS ---
+  edges.forEach(e => {
+    const data = e.data ? e.data : {
+      id: e.id ?? `e_${e.source}_${e.target}_${Date.now()}`,
+      source: e.source ?? e?.data?.source,
+      target: e.target ?? e?.data?.target,
+      weight: String(e.weight ?? e?.data?.weight ?? '')
+    }
+    const classes = (e.classes || e?.data?.classes || '').toString()
+    cy.add({ group:'edges', data, classes })
   })
 
   cy.endBatch()
+
+  // 👇 Limpia estilos inline “pegados” y asegura visibilidad de aristas
+  cy.nodes().removeStyle()
+  cy.edges().removeStyle()
+  cy.edges().style({ 'display': 'element', 'opacity': 1 })
+
   cy.fit(undefined, 24)
-  updateUidFromElements(elements.nodes, elements.edges)
-  cy.nodes().forEach(resizeNodeToLabel)
+  updateUidFromElements(nodes, edges)
+  cy.nodes().forEach(n => resizeNodeToLabel(n))
 }
 
 async function importJSON(ev){
