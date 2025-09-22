@@ -7,18 +7,6 @@
           <button class="tool" :class="{ 'is-active': nodeMode }" @click="toggleNodeMode">
             <i class="fa-regular fa-circle"></i> Nodo
           </button>
-          <button class="tool" :class="{ 'is-active': connectMode }" @click="toggleConnectMode">
-            <i class="fa-solid fa-link"></i> Conectar
-          </button>
-          <button class="tool" :class="{ 'is-active': moveMode }" @click="toggleMoveMode">
-            <i class="fa-solid fa-hand"></i> Mover
-          </button>
-          <button class="tool" :class="{ 'is-active': deleteMode }" @click="toggleDeleteMode">
-            <i class="fa-solid fa-eraser"></i> Borrar
-          </button>
-          <button class="tool" :class="{ 'is-active': textMode }" @click="toggleTextMode">
-            <i class="fa-solid fa-pen"></i> Texto
-          </button>
         </div>
 
         <div class="tools-right">
@@ -134,7 +122,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import EstiloPizarra from '@/components/EstiloPizarra.vue'
 import ExportPopup from '@/components/ExportPopup.vue'
 import EdgePropsPopup from '@/components/EdgePropsPopup.vue'
@@ -149,13 +137,13 @@ import Swal from 'sweetalert2'
 import 'sweetalert2/dist/sweetalert2.min.css'
 
 /* Algoritmos y utils */
-import {
-  johnson, reconstructPath, cpm, buildGraphFromCy
-} from '@/algorithms/johnson.js'
+import { johnson, reconstructPath, cpm, buildGraphFromCy } from '@/algorithms/johnson.js'
+import { createCyAnimator } from '@/utils/cy-animator.js'
 
 const cyRef = ref(null)
 const boardRef = ref(null)
 let cy = null
+let animator = null
 
 /* ===== MODAL DE OPCIONES ===== */
 const showOptions = ref(false)
@@ -316,6 +304,17 @@ function baseNodeName(n){ return (n.data('label')?.toString().split('\n')[0]) ||
 function clearCriticalStyles(){ cy.nodes().removeClass('critical'); cy.edges().removeClass('critical') }
 function clearHighlightStyles(){ cy.nodes().removeClass('highlight'); cy.edges().removeClass('highlight') }
 
+/* 🔄 Limpieza total antes de correr opciones */
+function resetVisuals(){
+  try { animator?.stop?.() } catch(_){}
+  clearCriticalStyles()
+  clearHighlightStyles()
+  cy?.elements()?.removeStyle()
+}
+
+/* ✅ dos frames para asegurar repintado antes de animar */
+const nextFrame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+
 /* ======= Handler del modal ======= */
 async function onOptionsConfirm({ mode }){
   const g = buildGraphFromCy(cy)
@@ -324,11 +323,10 @@ async function onOptionsConfirm({ mode }){
     return
   }
 
-  // Limpiar estilos anteriores
-  clearCriticalStyles(); clearHighlightStyles()
+  resetVisuals()
 
   if (mode === 'max'){
-    // ---- Máximo: CPM sin pedir s/t ----
+    // ---- Máximo: CPM ----
     const res = cpm(g)
     if (!res){
       await Swal.fire({ icon:'warning', title:'El grafo no es acíclico', html:'La Ruta Crítica (CPM) requiere un <b>DAG</b>.', ...swalColors })
@@ -336,13 +334,23 @@ async function onOptionsConfirm({ mode }){
     }
     const { E, L, slack, duration } = res
 
-    // Nodos: "Nombre\nE | L"
+    // 1) construir camino crítico SIN pintar aún
+    const critPath = buildCriticalPathFromSlack(E, slack)
+
+    // 2) forzar layout/repintado y animar primero
+    await nextTick()
+    await nextFrame()
+    if (critPath.length > 1){
+      await animator?.animatePath(critPath, { color:'#f06277', step:120 })
+    }
+
+    // 3) ahora sí: etiquetar nodos/aristas y dejar estilos persistentes
     cy.nodes().forEach(n => {
       if (n.hasClass('text-block')) return
       n.data('label', `${baseNodeName(n)}\n${E[n.id()]} | ${L[n.id()]}`)
       resizeNodeToLabel(n)
     })
-    // Aristas: "h=x\npeso" y resaltar holgura 0
+
     cy.edges().forEach(e => {
       const u = e.source().id(), v = e.target().id()
       const w = Number((e.data('weight')||'').toString().split('\n').pop()) || 0
@@ -353,10 +361,17 @@ async function onOptionsConfirm({ mode }){
       }
     })
 
+    // asegurar que el camino animado quede marcado como crítico
+    for (let i=0;i<critPath.length-1;i++){
+      const u = critPath[i], v = critPath[i+1]
+      cy.$(`edge[source="${u}"][target="${v}"]`).addClass('critical')
+      cy.$id(u).addClass('critical'); cy.$id(v).addClass('critical')
+    }
+
     await Swal.fire({
       icon:'success',
       title:'¡Ruta Crítica (CPM)!',
-      html:`Duración total: <b>${duration}</b><br>La ruta crítica está resaltada.`,
+      html:`D: <b>${duration}</b><br>La ruta crítica está resaltada.`,
       ...swalColors
     })
     return
@@ -369,14 +384,12 @@ async function onOptionsConfirm({ mode }){
     return
   }
 
-  // Opciones de nodos (tomadas del grafo actual)
   const nodeOptions = {}
   g.nodes.forEach(id => {
     const label = (cy.$id(id).data('label')?.toString().split('\n')[0]) || id
     nodeOptions[id] = label
   })
 
-  // Origen 
   const originSwal = await Swal.fire({
     title: 'Camino mínimo',
     html: '<div style="text-align:left">Selecciona <b>origen</b> y, si quieres, un <b>destino</b> para resaltar el camino.</div>',
@@ -393,7 +406,6 @@ async function onOptionsConfirm({ mode }){
   const source = originSwal.value
   if (!source) return
 
-  // Destino
   const destSwal = await Swal.fire({
     title: '¿Destino?',
     input: 'select',
@@ -407,10 +419,8 @@ async function onOptionsConfirm({ mode }){
   if (!destSwal.isConfirmed) return
   const target = destSwal.value
 
-  // Distancias y predecesores desde el origen
   const dS = dist[source], pS = prev[source]
 
-  // Etiquetas de nodos: "dist | dist" (similar a E|L en CPM)
   cy.nodes().forEach(n => {
     if (n.hasClass('text-block')) return
     const d = dS[n.id()]
@@ -419,7 +429,6 @@ async function onOptionsConfirm({ mode }){
     resizeNodeToLabel(n)
   })
 
-  // Etiquetas de aristas: "h=…\npeso" (holgura respecto a distancias mínimas)
   cy.edges().forEach(e => {
     const u = e.source().id(), v = e.target().id()
     const w = Number((e.data('weight')||'').toString().split('\n').pop()) || 0
@@ -427,13 +436,14 @@ async function onOptionsConfirm({ mode }){
     const hasV = dS[v] !== Number.POSITIVE_INFINITY
     const h = (hasU && hasV) ? (dS[v] - dS[u] - w) : 0
     e.data('weight', `h=${h}\n${w}`)
-    // 👇 A DIFERENCIA DE CPM, NO PINTAMOS ARISTAS CON h=0
   })
 
-  // Resaltar SOLO el camino s→t (azul), si eligieron destino
   if (target){
     const path = reconstructPath(pS, source, target)
     if (path.length){
+      await nextTick()
+      await nextFrame()
+      await animator?.animatePath(path, { color:'#5eb4ff', step:140 })
       for (let i=0;i<path.length-1;i++){
         const u = path[i], v = path[i+1]
         cy.$(`edge[source="${u}"][target="${v}"]`).addClass('highlight')
@@ -446,6 +456,42 @@ async function onOptionsConfirm({ mode }){
   } else {
     await Swal.fire({ icon:'success', title:'Distancias calculadas', html:`Se etiquetaron distancias desde <b>${source}</b> y holguras en las aristas.`, ...swalColors })
   }
+}
+
+/* === Camino crítico a partir de E y slack (sin depender de clases) === */
+function buildCriticalPathFromSlack(E, slack){
+  // Construir lista de aristas críticas (h=0)
+  const critAdj = new Map() // u -> array de v
+  cy.edges().forEach(e => {
+    const u = e.source().id(), v = e.target().id()
+    const w = Number((e.data('weight')||'').toString().split('\n').pop()) || 0
+    const h = slack[`${u}->${v}`]
+    if (h === 0 && E[v] === E[u] + w){
+      if (!critAdj.has(u)) critAdj.set(u, [])
+      critAdj.get(u).push(v)
+    }
+  })
+
+  if (critAdj.size === 0) return []
+
+  // fuente: nodo con indegree == 0 dentro del subgrafo crítico (o E mínimo)
+  const critNodes = new Set([...critAdj.keys(), ...[...critAdj.values()].flat()])
+  let start = [...critNodes].filter(id => cy.$id(id).indegree() === 0)[0]
+  if (!start){
+    start = [...critNodes].sort((a,b)=>(E[a]??0)-(E[b]??0))[0]
+  }
+  if (!start) return []
+
+  const path = [start]
+  const seen = new Set([start])
+  let cur = start
+  while (critAdj.has(cur) && critAdj.get(cur).length){
+    // Elegir siguiente por E más pequeño para determinismo
+    const next = critAdj.get(cur).slice().sort((v1,v2)=>(E[v1]??0)-(E[v2]??0))[0]
+    if (!next || seen.has(next)) break
+    path.push(next); seen.add(next); cur = next
+  }
+  return path
 }
 
 /* ===================== CY INIT ===================== */
@@ -473,7 +519,7 @@ onMounted(() => {
       { selector:'node:selected', style:{ 'border-color':'#ffffff', 'overlay-color':'#ffffff', 'overlay-opacity':0.18, 'overlay-padding':6 }},
       { selector:'node.edge-pending', style:{ 'overlay-color':'#567c8d', 'overlay-opacity':0.25, 'overlay-padding':8 }},
 
-      /* Etiquetas de aristas: "h=x\npeso" (CPM) o "h=x\npeso" en mínimo, sin colorear tight */
+      /* Etiquetas de aristas */
       { selector:'edge', style:{
         'width':2,
         'line-color':'#000000',
@@ -518,6 +564,8 @@ onMounted(() => {
     ]
   })
 
+  animator = createCyAnimator(cy)
+
   cy.on('tap', (evt) => {
     if (evt.target !== cy) return
     if (nodeMode.value){ openNodeNameForCreate(evt.position, 'Nodo'); return }
@@ -530,7 +578,7 @@ onMounted(() => {
     if (deleteMode.value) {
       const isEdge = ele.isEdge()
       const isText = ele.isNode() && ele.hasClass('text-block')
-      const isGraphNode = ele.isNode() && !isText
+      const isGraphNode = ele.isNode() && !ele.hasClass('text-block')
       const tipo = isEdge ? 'arista' : (isText ? 'texto' : 'nodo')
       const detalle = isGraphNode ? 'Se eliminarán también sus aristas asociadas.' : (isText ? 'Se eliminará el bloque de texto.' : '')
       const nombre = isText ? (ele.data('text')?.toString().slice(0,40)||'Texto') : isGraphNode ? (ele.data('label')||'Nodo') : ''
@@ -715,12 +763,10 @@ async function captureBoardCanvas(scale = 2){
   let html2canvas
   try {
     const mod = await import('html2canvas')
-    html2canvas = mod.default || mod
-  } catch (_) {
-    return null
-  }
+    html2canvas = (mod && (mod.default || mod)) || null
+  } catch (_) { return null }
   const boardEl = boardRef.value
-  if (!boardEl) return null
+  if (!boardEl || !html2canvas) return null
 
   const fabs = Array.from(boardEl.querySelectorAll('.fab'))
   const prev = fabs.map(el => el.style.visibility)
@@ -996,27 +1042,57 @@ async function exportZIP(base){
   downloadBlob(`${baseName}.zip`, zipBlob)
 }
 
-/* ===== serialización / carga ===== */
+/* ===== serialización / carga (MEJORADAS) ===== */
 function serializeGraph(){
-  const nodes = cy.nodes().map(n => ({
-    id: n.id(),
-    label: n.data('label') ?? '',
-    color: n.data('color') ?? '#57c3d1',
-    borderColor: n.data('borderColor') ?? '#167293',
-    text: n.hasClass('text-block') ? (n.data('text') ?? '') : undefined,
-    classes: n.classes(),
-    position: n.position()
+  const toStr = v => (v == null ? '' : String(v))
+
+  // Formato estilo Cytoscape (elements.*)
+  const elementsNodes = cy.nodes().map(n => ({
+    data: {
+      id: toStr(n.id()),
+      label: toStr(n.data('label') ?? ''),
+      color: toStr(n.data('color') ?? '#57c3d1'),
+      borderColor: toStr(n.data('borderColor') ?? '#167293'),
+      text: n.hasClass('text-block') ? toStr(n.data('text') ?? '') : undefined,
+    },
+    position: n.position(),
+    classes: n.classes()
   }))
-  const edges = cy.edges().map(e => ({
-    id: e.id(),
-    source: e.source().id(),
-    target: e.target().id(),
-    weight: e.data('weight') ?? ''
+
+  const elementsEdges = cy.edges().map(e => ({
+    data: {
+      id: toStr(e.id()),
+      source: toStr(e.source().id()),
+      target: toStr(e.target().id()),
+      weight: toStr(e.data('weight') ?? '')
+    },
+    classes: e.classes()
   }))
+
+  // Formato "plano" (graph.*) para compatibilidad
+  const graphNodes = elementsNodes.map(n => ({
+    id: n.data.id,
+    label: n.data.label,
+    color: n.data.color,
+    borderColor: n.data.borderColor,
+    text: n.data.text,
+    classes: n.classes,
+    position: n.position
+  }))
+
+  const graphEdges = elementsEdges.map(e => ({
+    id: e.data.id,
+    source: e.data.source,
+    target: e.data.target,
+    weight: e.data.weight,
+    classes: e.classes
+  }))
+
   return {
-    meta: { version: 1, exportedAt: new Date().toISOString() },
+    meta: { version: 2, exportedAt: new Date().toISOString() },
     board: { theme: theme.value, color: color.value, image: image.value, showGrid: showGrid.value },
-    graph: { nodes, edges }
+    graph: { nodes: graphNodes, edges: graphEdges },
+    elements: { nodes: elementsNodes, edges: elementsEdges }
   }
 }
 
@@ -1024,22 +1100,75 @@ function updateUidFromElements(nodes = [], edges = []){
   let maxNum = uid
   const rx = /(\d+)$/
   ;[...nodes, ...edges].forEach(el => {
-    const m = (el.id || '').match(rx)
+    // Soporta {id} o {data:{id}}
+    const id = (el && (el.id || el?.data?.id)) || ''
+    const m = String(id).match(rx)
     if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10) + 1)
   })
   uid = Math.max(uid, maxNum)
 }
 
 function loadFromSerializable(obj){
-  const g = obj?.graph || obj?.elements || obj
-  if (!g) throw new Error('Estructura inválida')
+  // Normaliza a estructura "elements" (nodos y aristas con data/position/classes)
+  let elements = null
 
-  const nodes = g.nodes || g?.elements?.nodes || []
-  const edges = g.edges || g?.elements?.edges || []
+  if (obj?.elements?.nodes && obj?.elements?.edges) {
+    elements = { nodes: obj.elements.nodes, edges: obj.elements.edges }
+  } else if (obj?.graph?.nodes && obj?.graph?.edges) {
+    elements = {
+      nodes: obj.graph.nodes.map(n => ({
+        data: {
+          id: String(n.id),
+          label: String(n.label ?? ''),
+          color: String(n.color ?? '#57c3d1'),
+          borderColor: String(n.borderColor ?? darkenColor(n.color ?? '#57c3d1', 28)),
+          text: n.text != null ? String(n.text) : undefined
+        },
+        position: n.position || { x: 0, y: 0 },
+        classes: (n.classes || '').toString()
+      })),
+      edges: obj.graph.edges.map(e => ({
+        data: {
+          id: String(e.id ?? `e_${e.source}_${e.target}_${Date.now()}`),
+          source: String(e.source),
+          target: String(e.target),
+          weight: String(e.weight ?? '')
+        },
+        classes: (e.classes || '').toString()
+      }))
+    }
+  } else if (Array.isArray(obj?.nodes) && Array.isArray(obj?.edges)) {
+    // Compatibilidad con esquema plano {nodes, edges}
+    elements = {
+      nodes: obj.nodes.map(n => ({
+        data: {
+          id: String(n.id),
+          label: String(n.label ?? ''),
+          color: String(n.color ?? '#57c3d1'),
+          borderColor: String(n.borderColor ?? darkenColor(n.color ?? '#57c3d1', 28)),
+          text: n.text != null ? String(n.text) : undefined
+        },
+        position: n.position || { x: 0, y: 0 },
+        classes: (n.classes || '').toString()
+      })),
+      edges: obj.edges.map(e => ({
+        data: {
+          id: String(e.id ?? `e_${e.source}_${e.target}_${Date.now()}`),
+          source: String(e.source),
+          target: String(e.target),
+          weight: String(e.weight ?? '')
+        },
+        classes: (e.classes || '').toString()
+      }))
+    }
+  }
+
+  if (!elements?.nodes || !elements?.edges) throw new Error('Estructura inválida')
 
   cy.startBatch()
   cy.elements().remove()
 
+  // Restaura estado visual del tablero si viene
   if (obj?.board){
     theme.value = obj.board.theme ?? theme.value
     color.value = obj.board.color ?? color.value
@@ -1047,33 +1176,24 @@ function loadFromSerializable(obj){
     showGrid.value = obj.board.showGrid ?? showGrid.value
   }
 
-  nodes.forEach(n => {
-    const data = n.data ? n.data : {
-      id: n.id,
-      label: n.label ?? '',
-      color: n.color ?? '#57c3d1',
-      borderColor: n.borderColor ?? darkenColor(n.color ?? '#57c3d1', 28),
-      text: n.text
-    }
-    const position = n.position || n?.data?.position || n?.pos || { x: 0, y: 0 }
-    const classes = (n.classes || n?.data?.classes || '').toString()
-    cy.add({ group:'nodes', data, position, classes })
+  // Agregar nodos primero
+  elements.nodes.forEach(n => {
+    cy.add({ group:'nodes', data:n.data, position:n.position, classes:n.classes })
   })
 
-  edges.forEach(e => {
-    const data = e.data ? e.data : {
-      id: e.id ?? `e_${e.source}_${e.target}_${Date.now()}`,
-      source: e.source ?? e?.data?.source,
-      target: e.target ?? e?.data?.target,
-      weight: e.weight ?? e?.data?.weight ?? ''
-    }
-    cy.add({ group:'edges', data })
+  // Luego aristas; descartar si faltan extremos
+  elements.edges.forEach(e => {
+    const d = e.data || {}
+    const src = d.source, tgt = d.target
+    if (!src || !tgt) return
+    if (cy.$id(src).empty() || cy.$id(tgt).empty()) return
+    cy.add({ group:'edges', data:d, classes:e.classes })
   })
 
   cy.endBatch()
   cy.fit(undefined, 24)
-  updateUidFromElements(nodes, edges)
-  cy.nodes().forEach(n => resizeNodeToLabel(n))
+  updateUidFromElements(elements.nodes, elements.edges)
+  cy.nodes().forEach(resizeNodeToLabel)
 }
 
 async function importJSON(ev){
@@ -1142,7 +1262,9 @@ async function confirmClear(e){
     confirmButtonText:'Limpiar', cancelButtonText:'Cancelar', ...swalColors
   })
   if (isConfirmed){
-    cy?.elements().remove(); clearPendingConnect()
+    cy?.elements().remove()
+    resetVisuals()
+    clearPendingConnect()
     nodeMode.value = connectMode.value = deleteMode.value = moveMode.value = textMode.value = false
     applyGrabRules()
   }
