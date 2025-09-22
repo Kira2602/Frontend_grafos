@@ -327,6 +327,29 @@ function resetVisuals(){
 /* ✅ dos frames para asegurar repintado antes de animar */
 const nextFrame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
 
+/* === Ciclos / nodos de retorno (para bloquear Johnson mínimos) === */
+function hasDirectedCycle(g){
+  // bucle directo u->u
+  for (const e of g.edges) if (e.u === e.v) return true
+
+  const adj = {}; const color = {} // 0=blanco,1=gris,2=negro
+  g.nodes.forEach(v => { adj[v] = []; color[v] = 0 })
+  g.edges.forEach(e => adj[e.u].push(e.v))
+
+  const dfs = (u) => {
+    color[u] = 1
+    for (const v of adj[u]) {
+      if (color[v] === 1) return true   // back-edge
+      if (color[v] === 0 && dfs(v)) return true
+    }
+    color[u] = 2
+    return false
+  }
+
+  for (const v of g.nodes) if (color[v] === 0 && dfs(v)) return true
+  return false
+}
+
 /* ======= Handler del modal ======= */
 async function onOptionsConfirm({ mode }){
   const g = buildGraphFromCy(cy)
@@ -341,7 +364,7 @@ async function onOptionsConfirm({ mode }){
     // ---- Máximo: CPM ----
     const res = cpm(g)
     if (!res){
-      await Swal.fire({ icon:'warning', title:'El grafo no es acíclico', html:'La Ruta Crítica (CPM) requiere un <b>DAG</b>.', ...swalColors })
+      await Swal.fire({ icon:'warning', title:'El grafo no es acíclico', html:'La Ruta Crítica (CPM) requiere no <b> tener nodos de retorno</b>.', ...swalColors })
       return
     }
     const { E, L, slack, duration } = res
@@ -383,13 +406,24 @@ async function onOptionsConfirm({ mode }){
     await Swal.fire({
       icon:'success',
       title:'¡Ruta Crítica (CPM)!',
-      html:`D: <b>${duration}</b><br>La ruta crítica está resaltada.`,
+      html:`Distancia: <b>${duration}</b><br>La ruta crítica está resaltada.`,
       ...swalColors
     })
     return
   }
 
   // ---- Mínimo (Johnson) ----
+  // ❗ Bloquear si hay nodos de retorno/ciclos (incluye bucles u->u)
+  if (hasDirectedCycle(g)) {
+    await Swal.fire({
+      icon: 'warning',
+      title: 'Grafo con ciclos (nodos de retorno)',
+      html: 'Johnson (mínimos) está deshabilitado cuando hay ciclos o bucles.<br>Elimina los retornos.',
+      ...swalColors
+    })
+    return
+  }
+
   const { negCycle, dist, prev } = johnson(g)
   if (negCycle){
     await Swal.fire({ icon:'error', title:'Ciclo negativo detectado', text:'Johnson no puede ejecutarse con ciclos de peso negativo.', ...swalColors })
