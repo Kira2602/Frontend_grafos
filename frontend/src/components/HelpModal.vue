@@ -1,8 +1,32 @@
 <script setup>
+import { computed } from 'vue'
+
 const props = defineProps({
-  open: { type: Boolean, default: false }
+  open: { type: Boolean, default: false },
+  /** Título del modal (por defecto: "Tutorial") */
+  heading: { type: String, default: 'Tutorial' },
+  /** ID de YouTube (solo el ID). Si no se pasa, usa el que tenías antes. */
+  videoId: { type: String, default: 'ZDfQM-VOog4' },
+  /** URL completa opcional para el botón "Abrir en YouTube". Si no viene, se arma con videoId. */
+  youtubeUrl: { type: String, default: '' },
+  /** EXTRA: query opcional para el embed (ej: "si=IA050QXKmZ5Da7Jl") */
+  embedQuery: { type: String, default: '' }
 })
 const emit = defineEmits(['close'])
+
+/* Base del embed con parámetros comunes */
+const baseEmbed = computed(() =>
+  `https://www.youtube.com/embed/${props.videoId}?rel=0&modestbranding=1&playsinline=1`
+)
+
+/* Si hay embedQuery, se agrega al final */
+const iframeSrc = computed(() =>
+  props.embedQuery ? `${baseEmbed.value}&${props.embedQuery}` : baseEmbed.value
+)
+
+const ytHref = computed(() =>
+  props.youtubeUrl || `https://youtu.be/${props.videoId}`
+)
 </script>
 
 <template>
@@ -22,12 +46,12 @@ const emit = defineEmits(['close'])
         </div>
 
         <div class="right">
-          <h2 class="heading">Tutorial</h2>
+          <h2 class="heading">{{ heading }}</h2>
 
           <div class="video-wrapper">
             <iframe
               class="yt"
-              src="https://www.youtube.com/embed/ZDfQM-VOog4?rel=0&modestbranding=1&playsinline=1"
+              :src="iframeSrc"
               title="YouTube video"
               frameborder="0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
@@ -40,7 +64,7 @@ const emit = defineEmits(['close'])
           <div class="actions">
             <a
               class="yt-button"
-              href="https://youtu.be/ZDfQM-VOog4"
+              :href="ytHref"
               target="_blank"
               rel="noopener"
             >
@@ -70,7 +94,7 @@ const emit = defineEmits(['close'])
   border-radius: 20px;
   position: relative;
   box-shadow: 0 20px 60px rgba(0,0,0,.35);
-  max-height: 92vh;               /* por si se hace muy alto en pantallas pequeñas */
+  max-height: 92vh;
   overflow: hidden;
 }
 
@@ -121,15 +145,15 @@ const emit = defineEmits(['close'])
 /* Botón centrado */
 .actions{
   display: flex;
-  justify-content: center;       /* ⬅️ centrado horizontal */
-  margin-top: 12px;              /* poco margen, reduce espacio total */
+  justify-content: center;
+  margin-top: 12px;
 }
 .yt-button{
   display: inline-block;
   padding: 10px 16px;
   border-radius: 999px;
   text-decoration: none;
-  background: #e6eef6;           /* #C8D9E6 suavizado */
+  background: #e6eef6;
   color: #2f4156;
   font-weight: 700;
   box-shadow: 0 8px 18px rgba(0,0,0,.08);

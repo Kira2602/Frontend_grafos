@@ -9,6 +9,9 @@ const router = useRouter()
 const goToPizarra = () => {                     
   router.push({ name: 'Pizarra' })
 }
+const goToJohnson = () => {                     
+  router.push({ name: 'johnson' })
+}
 
 function onHeroCta () {
   const section = document.getElementById('cards')
@@ -84,16 +87,16 @@ onMounted(() => {
                 <div class="image-content">
                   <span class="overlay"></span>
                   <div class="card-image">
-                    <img src="../assets/img/enproceso.jpg" alt="" class="card-img" />
+                    <img src="../assets/img/alg_johnson.png" alt="" class="card-img" />
                   </div>
                 </div>
                 <div class="card-content">
-                  <h2 class="name">Algoritmo</h2>
+                  <h2 class="name">Algoritmo De Johnson</h2>
                   <p class="description">
-                    The lorem text the section that contains header with having open functionality.
-                    Lorem dolor sit amet consectetur adipisicing elit.
+                    En la pizarra de grafos aplica el algoritmo de Johnson para calcular la ruta máxima (Ruta Crítica) y la ruta mínima, 
+                    además de exportar e importar tu algoritmo. 
                   </p>
-                  <button class="button">Iniciar</button>
+                  <button class="button" @click="goToJohnson">Iniciar</button>
                 </div>
               </div>
 
@@ -222,11 +225,10 @@ html { scroll-behavior: smooth; }
   background-color: #FFF;
 }
 
-/* === Imagen RECTANGULAR HORIZONTAL (antes era círculo) === */
 .cards-carousel .card-image{
   position: relative;
-  width: 220px;    /* más ancho */
-  height: 130px;   /* menos alto */
+  width: 220px;    
+  height: 130px;   
   border-radius: 14px;
   background: #FFF;
   padding: 3px;

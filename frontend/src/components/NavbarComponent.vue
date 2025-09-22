@@ -19,10 +19,28 @@
           <!-- Centro: Menú -->
           <li class="nav-center">
             <ul class="nav-menu">
+              <!-- Algoritmos -->
               <li class="nav-link" tabindex="0">
                 Algoritmos <i class="fa fa-chevron-up"></i>
                 <ul class="nav-drop" role="menu">
-                  <li role="menuitem">...</li>
+                  <li
+                    role="menuitem"
+                    tabindex="0"
+                    @click="goPizarra"
+                    @keydown.enter="goPizarra"
+                    aria-label="Ir a Pizarra de grafos"
+                  >
+                    Pizarra de grafos
+                  </li>
+                  <li
+                    role="menuitem"
+                    tabindex="0"
+                    @click="goJohnson"
+                    @keydown.enter="goJohnson"
+                    aria-label="Ir a Algoritmo de Johnson"
+                  >
+                    Johnson
+                  </li>
                 </ul>
               </li>
 
@@ -38,9 +56,9 @@
                 Inicio
               </li>
 
-              <!-- Ayuda: SOLO en /pizarra -->
+              <!-- Ayuda: en /pizarra y /johnson -->
               <li
-                v-if="showHelp"
+                v-if="!!helpCfg"
                 class="nav-link"
                 role="button"
                 tabindex="0"
@@ -59,10 +77,14 @@
     </nav>
   </header>
 
-  <!-- Modal Ayuda: solo se monta en /pizarra -->
+  <!-- Modal Ayuda -->
   <HelpModal
-    v-if="showHelp"
+    v-if="!!helpCfg"
     :open="isHelpOpen"
+    :video-id="helpCfg.videoId"
+    :heading="helpCfg.heading"
+    :youtube-url="helpCfg.youtubeUrl"
+    :embed-query="helpCfg.embedQuery"
     @close="isHelpOpen = false"
   />
 </template>
@@ -74,7 +96,6 @@ import HelpModal from './HelpModal.vue'
 
 const isOpen = ref(false)
 const isHelpOpen = ref(false)
-
 const toggleNav = () => (isOpen.value = !isOpen.value)
 
 const router = useRouter()
@@ -85,22 +106,64 @@ const goHome = () => {
   router.push('/')
 }
 
+// ✅ Navegaciones del submenú Algoritmos
+const goPizarra = () => {
+  isOpen.value = false
+  router.push('/pizarra')
+}
+const goJohnson = () => {
+  isOpen.value = false
+  router.push('/johnson')
+}
+
 const openHelp = () => {
   isOpen.value = false
   isHelpOpen.value = true
 }
 
-/* 👇 Mostrar "Ayuda" SOLO en la vista Pizarra (name: 'Pizarra' / path: '/pizarra') */
-const showHelp = computed(() => route.name === 'Pizarra' || route.path === '/pizarra')
+/**
+ * Config de ayuda por ruta.
+ * - Pizarra: video por defecto
+ * - Johnson: TU video con query `si=...`
+ */
+const helpCfg = computed(() => {
+  const name = route.name?.toString().toLowerCase() || ''
+  const path = route.path?.toString().toLowerCase() || ''
+
+  if (name === 'pizarra' || path === '/pizarra') {
+    const videoId = 'ZDfQM-VOog4'
+    return {
+      heading: 'Tutorial',
+      videoId,
+      youtubeUrl: `https://youtu.be/${videoId}`,
+      embedQuery: '' // sin extra
+    }
+  }
+
+  if (name === 'johnson' || path === '/johnson') {
+    // 👇 Tu video de Johnson
+    const videoId = 'ZJJhLHeQXoM'
+    const si = 'IA050QXKmZ5Da7Jl'
+    return {
+      heading: 'Johnson: Tutorial',
+      videoId,
+      youtubeUrl: `https://youtu.be/${videoId}?si=${si}`,
+      embedQuery: `si=${si}` // se añade al iframe del embed
+    }
+  }
+
+  return null
+})
 
 /* Cierra el menú (y el modal si cambia de ruta) */
 watch(() => route.fullPath, () => {
   isOpen.value = false
-  if (!showHelp.value) isHelpOpen.value = false
+  if (!helpCfg.value) isHelpOpen.value = false
 })
 </script>
 
 <style lang="scss" scoped>
+/* (tus estilos tal cual) */
 $primary-color: #c8d9e6;
 $primary-color-light: rgba($primary-color, 0.2);
 $shadow-color: #e1e5ee;
