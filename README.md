@@ -22,7 +22,7 @@ npm install
 2. Ejecutar 
 ```bash
 npm run dev
-
+```
 ## Dependencias necesarias:
 ```bash
 cd frontend 
