@@ -3,23 +3,19 @@ import { computed } from 'vue'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
-  /** Título del modal (por defecto: "Tutorial") */
   heading: { type: String, default: 'Tutorial' },
-  /** ID de YouTube (solo el ID). Si no se pasa, usa el que tenías antes. */
   videoId: { type: String, default: 'ZDfQM-VOog4' },
-  /** URL completa opcional para el botón "Abrir en YouTube". Si no viene, se arma con videoId. */
   youtubeUrl: { type: String, default: '' },
-  /** EXTRA: query opcional para el embed (ej: "si=IA050QXKmZ5Da7Jl") */
-  embedQuery: { type: String, default: '' }
+  embedQuery: { type: String, default: '' },
+  pdfUrl: { type: String, default: '' } // ✅ nuevo prop
 })
+
 const emit = defineEmits(['close'])
 
-/* Base del embed con parámetros comunes */
 const baseEmbed = computed(() =>
   `https://www.youtube.com/embed/${props.videoId}?rel=0&modestbranding=1&playsinline=1`
 )
 
-/* Si hay embedQuery, se agrega al final */
 const iframeSrc = computed(() =>
   props.embedQuery ? `${baseEmbed.value}&${props.embedQuery}` : baseEmbed.value
 )
@@ -35,7 +31,7 @@ const ytHref = computed(() =>
       <button class="close-btn" @click="emit('close')" aria-label="Cerrar">×</button>
 
       <div class="help-content">
-        <!-- Lottie a la izquierda -->
+        <!-- Lottie animación -->
         <div class="lottie-box">
           <iframe
             class="lottie"
@@ -70,6 +66,16 @@ const ytHref = computed(() =>
             >
               Abrir en YouTube
             </a>
+
+            <a
+              v-if="pdfUrl"
+              class="yt-button"
+              :href="pdfUrl"
+              target="_blank"
+              rel="noopener"
+            >
+              Guía en PDF
+            </a>
           </div>
         </div>
       </div>
@@ -78,61 +84,54 @@ const ytHref = computed(() =>
 </template>
 
 <style scoped>
-/* Overlay */
-.help-overlay{
+.help-overlay {
   position: fixed; inset: 0;
-  background: rgba(0,0,0,.45);
+  background: rgba(0, 0, 0, 0.45);
   display: grid; place-items: center;
   z-index: 9999;
 }
 
-/* Modal (altura auto, sin espacio sobrante) */
-.help-modal{
+.help-modal {
   background: #fff;
   width: 920px; max-width: 94vw;
   padding: 18px 22px;
   border-radius: 20px;
   position: relative;
-  box-shadow: 0 20px 60px rgba(0,0,0,.35);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .35);
   max-height: 92vh;
   overflow: hidden;
 }
 
-/* Cerrar */
-.close-btn{
+.close-btn {
   position: absolute; top: 10px; right: 12px;
   font-size: 26px; line-height: 1;
   background: transparent; border: 0; cursor: pointer;
   color: #333;
 }
 
-/* Contenido en dos columnas (Lottie + video) */
-.help-content{
+.help-content {
   display: grid;
   grid-template-columns: 320px 1fr;
   gap: 20px;
   align-items: center;
 }
 
-/* Lottie */
-.lottie-box{ width: 100%; }
-.lottie{
+.lottie-box { width: 100%; }
+.lottie {
   width: 100%;
   aspect-ratio: 1 / 1;
   border: 0;
   display: block;
 }
 
-/* Derecha */
-.right{ width: 100%; }
-.heading{
+.right { width: 100%; }
+.heading {
   text-align: center;
   font-size: 28px;
   color: #243142;
 }
 
-/* Caja del video con relación 16:9 para que no expanda el modal */
-.video-wrapper{
+.video-wrapper {
   width: 80%;
   aspect-ratio: 16 / 9;
   border-radius: 14px;
@@ -140,15 +139,15 @@ const ytHref = computed(() =>
   background: #000;
   margin: 0 auto;
 }
-.yt{ width: 100%; height: 100%; border: 0; display: block; }
+.yt { width: 100%; height: 100%; border: 0; display: block; }
 
-/* Botón centrado */
-.actions{
+.actions {
   display: flex;
   justify-content: center;
   margin-top: 12px;
+  gap: 1rem;
 }
-.yt-button{
+.yt-button {
   display: inline-block;
   padding: 10px 16px;
   border-radius: 999px;
@@ -156,18 +155,20 @@ const ytHref = computed(() =>
   background: #e6eef6;
   color: #2f4156;
   font-weight: 700;
-  box-shadow: 0 8px 18px rgba(0,0,0,.08);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, .08);
   transition: transform .15s ease, box-shadow .15s ease;
 }
-.yt-button:hover{ transform: translateY(-1px); box-shadow: 0 10px 22px rgba(0,0,0,.12); }
+.yt-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, .12);
+}
 
-/* Responsive */
-@media (max-width: 900px){
-  .help-content{
+@media (max-width: 900px) {
+  .help-content {
     grid-template-columns: 1fr;
     align-items: start;
   }
-  .lottie{ max-width: 360px; margin: 0 auto; }
-  .heading{ text-align: center; }
+  .lottie { max-width: 360px; margin: 0 auto; }
+  .heading { text-align: center; }
 }
 </style>

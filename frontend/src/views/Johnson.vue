@@ -206,25 +206,101 @@ function openEdgeProps({ sId, tId, editId = null, defaultWeight = '1', initialDi
   }
   showEdgeProps.value = true
 }
-function onEdgePropsConfirm({ weight, dir }) {
+
+/* 🚫 Reglas “una sola dirección” y sin ciclos al construir */
+function hasOppositeEdge(u, v, ignoreId=null){
+  const sel = cy.$(`edge[source="${v}"][target="${u}"]`)
+  if (sel.empty()) return false
+  if (!ignoreId) return true
+  return sel.some(e => e.id() !== ignoreId)
+}
+function wouldIntroduceCycle(u, v, ignoreId=null){
+  if (u === v) return true
+  const seen = new Set([v])
+  const stack = [v]
+  while (stack.length){
+    const x = stack.pop()
+    if (x === u) return true
+    cy.$(`edge[source="${x}"]`).forEach(e => {
+      if (ignoreId && e.id() === ignoreId) return
+      const y = e.target().id()
+      if (!seen.has(y)){ seen.add(y); stack.push(y) }
+    })
+  }
+  return false
+}
+async function showReturnAlert(){
+  await Swal.fire({
+    icon: 'warning',
+    title: 'Dirección de retorno no permitida',
+    html: 'No está permitido <b>nodos de retorno</b> para ejecutar el algoritmo de Johnson.<br>El grafo debe tener <b>una sola dirección</b> (sin retornos ni ciclos).',
+    ...swalColors
+  })
+}
+function canAddDirectedEdge(u, v, { ignoreId=null } = {}){
+  if (u === v) return false
+  if (hasOppositeEdge(u, v, ignoreId)) return false
+  if (wouldIntroduceCycle(u, v, ignoreId)) return false
+  return true
+}
+
+/* === Helpers de peso (unificados) === */
+function extractNumericWeight(raw){
+  // Toma la última línea (por si arriba viene "h=...") y parsea número
+  const last = String(raw ?? '').split('\n').pop().trim()
+  const val = Number(last)
+  return Number.isFinite(val) ? val : NaN
+}
+function edgeWeight(e){ return extractNumericWeight(e?.data?.('weight')) }
+function findNegativeEdges(){
+  const bad = []
+  cy?.edges()?.forEach(e => {
+    const w = extractNumericWeight(e.data('weight'))
+    if (Number.isFinite(w) && w < 0) {
+      bad.push({ id: e.id(), u: e.source().id(), v: e.target().id(), w })
+    }
+  })
+  return bad
+}
+
+async function showNegativeEdgesAlert(list){
+  const sample = list.slice(0, 5).map(x => `${x.u}→${x.v} (w=${x.w})`).join('<br>')
+  const extra = list.length > 5 ? `<br>… y ${list.length - 5} más` : ''
+  await Swal.fire({
+    icon: 'warning',
+    title: 'Pesos negativos detectados',
+    html:
+      'Johnson <b>no admite pesos negativos</b>.<br>' +
+      (list.length ? `<div style="text-align:left;margin-top:8px"><b>Ejemplos:</b><br>${sample}${extra}</div>` : ''),
+    ...swalColors
+  })
+}
+
+async function onEdgePropsConfirm({ weight, dir }) {
   const { sId, tId, editId, isLoop } = edgeCtx.value
+
+  // No permitir "ambas direcciones"
+  if (dir === 'both') { await showReturnAlert(); return }
+
+  // Resolver dirección
+  const proposal = (isLoop || dir === 'forward') ? { u: sId, v: tId } : { u: tId, v: sId }
+
+  // Validar dirección
+  if (!canAddDirectedEdge(proposal.u, proposal.v, { ignoreId: editId })) {
+    await showReturnAlert()
+    return
+  }
+
+  // (Peso ya validado en EdgePropsPopup: >= 0). Aplicar
   if (editId) {
     const ele = cy.$id(editId)
     if (!ele.empty()) {
-      if (isLoop || dir === 'forward') ele.data({ weight, source: sId, target: tId })
-      else if (dir === 'reverse')       ele.data({ weight, source: tId, target: sId })
-      else {
-        ele.data({ weight, source: sId, target: tId })
-        const rev = cy.$(`edge[source="${tId}"][target="${sId}"]`)
-        if (rev.empty()) cy.add({ group: 'edges', data: { id: `e_${tId}_${sId}_${Date.now()}`, source: tId, target: sId, weight } })
-        else rev.data('weight', weight)
-      }
+      ele.data({ weight, source: proposal.u, target: proposal.v })
     }
   } else {
-    if (isLoop || dir === 'forward') ensureEdge(sId, tId, weight)
-    else if (dir === 'reverse')      ensureEdge(tId, sId, weight)
-    else { ensureEdge(sId, tId, weight); ensureEdge(tId, sId, weight) }
+    ensureEdge(proposal.u, proposal.v, weight)
   }
+
   showEdgeProps.value = false
 }
 
@@ -298,8 +374,9 @@ function computeAdjacency(){
     const s = idx[e.source().id()]
     const t = idx[e.target().id()]
     if (s == null || t == null) return
-    const w = Number((e.data('weight')||'').toString().split('\n').pop()) || 1
-    M[s][t] += w
+    const w = extractNumericWeight(e.data('weight'))
+    const safe = Number.isFinite(w) ? w : 1
+    M[s][t] += safe
   })
   return { labels, matrix: M }
 }
@@ -327,25 +404,21 @@ function resetVisuals(){
 /* ✅ dos frames para asegurar repintado antes de animar */
 const nextFrame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
 
-/* === Ciclos / nodos de retorno (para bloquear Johnson mínimos) === */
+/* === Ciclos / nodos de retorno (para bloquear Johnson mínimos en ejecución) === */
 function hasDirectedCycle(g){
-  // bucle directo u->u
   for (const e of g.edges) if (e.u === e.v) return true
-
-  const adj = {}; const color = {} // 0=blanco,1=gris,2=negro
+  const adj = {}; const color = {}
   g.nodes.forEach(v => { adj[v] = []; color[v] = 0 })
   g.edges.forEach(e => adj[e.u].push(e.v))
-
   const dfs = (u) => {
     color[u] = 1
     for (const v of adj[u]) {
-      if (color[v] === 1) return true   // back-edge
+      if (color[v] === 1) return true
       if (color[v] === 0 && dfs(v)) return true
     }
     color[u] = 2
     return false
   }
-
   for (const v of g.nodes) if (color[v] === 0 && dfs(v)) return true
   return false
 }
@@ -360,60 +433,56 @@ async function onOptionsConfirm({ mode }){
 
   resetVisuals()
 
+  /* ====== CPM (máximos) ====== */
   if (mode === 'max'){
-    // ---- Máximo: CPM ----
     const res = cpm(g)
     if (!res){
-      await Swal.fire({ icon:'warning', title:'El grafo no es acíclico', html:'La Ruta Crítica (CPM) requiere no <b> tener nodos de retorno</b>.', ...swalColors })
+      await Swal.fire({ icon:'warning', title:'El grafo no es acíclico', html:'La Ruta Crítica (CPM) requiere un <b>DAG</b>.', ...swalColors })
       return
     }
     const { E, L, slack, duration } = res
-
-    // 1) construir camino crítico SIN pintar aún
     const critPath = buildCriticalPathFromSlack(E, slack)
-
-    // 2) forzar layout/repintado y animar primero
-    await nextTick()
-    await nextFrame()
+    await nextTick(); await nextFrame()
     if (critPath.length > 1){
-      await animator?.animatePath(critPath, { color:'#f06277', step:120 })
+      await animator?.animatePath((critPath), { color:'#f06277', step:120 })
     }
-
-    // 3) ahora sí: etiquetar nodos/aristas y dejar estilos persistentes
     cy.nodes().forEach(n => {
       if (n.hasClass('text-block')) return
       n.data('label', `${baseNodeName(n)}\n${E[n.id()]} | ${L[n.id()]}`)
       resizeNodeToLabel(n)
     })
-
     cy.edges().forEach(e => {
       const u = e.source().id(), v = e.target().id()
-      const w = Number((e.data('weight')||'').toString().split('\n').pop()) || 0
+      const w = extractNumericWeight(e.data('weight')) || 0
       const h = slack[`${u}->${v}`] ?? 0
       e.data('weight', `h=${h}\n${w}`)
       if (h === 0) {
         e.addClass('critical'); cy.$id(u).addClass('critical'); cy.$id(v).addClass('critical')
       }
     })
-
-    // asegurar que el camino animado quede marcado como crítico
     for (let i=0;i<critPath.length-1;i++){
       const u = critPath[i], v = critPath[i+1]
       cy.$(`edge[source="${u}"][target="${v}"]`).addClass('critical')
       cy.$id(u).addClass('critical'); cy.$id(v).addClass('critical')
     }
-
     await Swal.fire({
       icon:'success',
       title:'¡Ruta Crítica (CPM)!',
-      html:`Distancia: <b>${duration}</b><br>La ruta crítica está resaltada.`,
+      html:`Duración: <b>${duration}</b>`,
       ...swalColors
     })
     return
   }
 
-  // ---- Mínimo (Johnson) ----
-  // ❗ Bloquear si hay nodos de retorno/ciclos (incluye bucles u->u)
+  /* ====== Johnson (mínimos) ====== */
+  // 0) Bloqueo por pesos negativos
+  const negs = findNegativeEdges()
+  if (negs.length){
+    await showNegativeEdgesAlert(negs)
+    return
+  }
+
+  // 1) Sin ciclos dirigidos (retornos)
   if (hasDirectedCycle(g)) {
     await Swal.fire({
       icon: 'warning',
@@ -424,12 +493,14 @@ async function onOptionsConfirm({ mode }){
     return
   }
 
+  // 2) Calcular Johnson
   const { negCycle, dist, prev } = johnson(g)
   if (negCycle){
     await Swal.fire({ icon:'error', title:'Ciclo negativo detectado', text:'Johnson no puede ejecutarse con ciclos de peso negativo.', ...swalColors })
     return
   }
 
+  // 3) Elegir origen/destino
   const nodeOptions = {}
   g.nodes.forEach(id => {
     const label = (cy.$id(id).data('label')?.toString().split('\n')[0]) || id
@@ -477,7 +548,7 @@ async function onOptionsConfirm({ mode }){
 
   cy.edges().forEach(e => {
     const u = e.source().id(), v = e.target().id()
-    const w = Number((e.data('weight')||'').toString().split('\n').pop()) || 0
+    const w = extractNumericWeight(e.data('weight')) || 0
     const hasU = dS[u] !== Number.POSITIVE_INFINITY
     const hasV = dS[v] !== Number.POSITIVE_INFINITY
     const h = (hasU && hasV) ? (dS[v] - dS[u] - w) : 0
@@ -504,35 +575,29 @@ async function onOptionsConfirm({ mode }){
   }
 }
 
-/* === Camino crítico a partir de E y slack (sin depender de clases) === */
+/* === Camino crítico a partir de E y slack === */
 function buildCriticalPathFromSlack(E, slack){
-  // Construir lista de aristas críticas (h=0)
-  const critAdj = new Map() // u -> array de v
+  const critAdj = new Map()
   cy.edges().forEach(e => {
     const u = e.source().id(), v = e.target().id()
-    const w = Number((e.data('weight')||'').toString().split('\n').pop()) || 0
+    const w = extractNumericWeight(e.data('weight')) || 0
     const h = slack[`${u}->${v}`]
     if (h === 0 && E[v] === E[u] + w){
       if (!critAdj.has(u)) critAdj.set(u, [])
       critAdj.get(u).push(v)
     }
   })
-
   if (critAdj.size === 0) return []
-
-  // fuente: nodo con indegree == 0 dentro del subgrafo crítico (o E mínimo)
   const critNodes = new Set([...critAdj.keys(), ...[...critAdj.values()].flat()])
   let start = [...critNodes].filter(id => cy.$id(id).indegree() === 0)[0]
   if (!start){
     start = [...critNodes].sort((a,b)=>(E[a]??0)-(E[b]??0))[0]
   }
   if (!start) return []
-
   const path = [start]
   const seen = new Set([start])
   let cur = start
   while (critAdj.has(cur) && critAdj.get(cur).length){
-    // Elegir siguiente por E más pequeño para determinismo
     const next = critAdj.get(cur).slice().sort((v1,v2)=>(E[v1]??0)-(E[v2]??0))[0]
     if (!next || seen.has(next)) break
     path.push(next); seen.add(next); cur = next
@@ -1103,9 +1168,7 @@ function serializeGraph(){
     id: e.id(),
     source: e.source().id(),
     target: e.target().id(),
-    // 👇 fuerza string y conserva multilínea
     weight: String(e.data('weight') ?? ''),
-    // 👇 exporta clases (critical/highlight/etc.)
     classes: e.classes()
   }))
   return {
@@ -1142,7 +1205,6 @@ function loadFromSerializable(obj){
     showGrid.value = obj.board.showGrid ?? showGrid.value
   }
 
-  // --- NODOS ---
   nodes.forEach(n => {
     const data = n.data ? n.data : {
       id: n.id,
@@ -1156,7 +1218,6 @@ function loadFromSerializable(obj){
     cy.add({ group:'nodes', data, position, classes })
   })
 
-  // --- ARISTAS ---
   edges.forEach(e => {
     const data = e.data ? e.data : {
       id: e.id ?? `e_${e.source}_${e.target}_${Date.now()}`,
@@ -1170,7 +1231,6 @@ function loadFromSerializable(obj){
 
   cy.endBatch()
 
-  // 👇 Limpia estilos inline “pegados” y asegura visibilidad de aristas
   cy.nodes().removeStyle()
   cy.edges().removeStyle()
   cy.edges().style({ 'display': 'element', 'opacity': 1 })
@@ -1200,7 +1260,36 @@ async function importJSON(ev){
 
     loadFromSerializable(obj)
 
-    await Swal.fire({ icon:'success', title:'Importación completada', text:'El grafo se cargó correctamente.', confirmButtonText:'OK', ...swalColors })
+    // 🔍 Tras cargar, revisar pesos negativos y ofrecer normalizar
+    const negs = findNegativeEdges()
+    if (negs.length){
+      const sample = negs.slice(0,5).map(x=>`${x.u}→${x.v} (w=${x.w})`).join('<br>')
+      const extra = negs.length>5 ? `<br>… y ${negs.length-5} más` : ''
+      const resp = await Swal.fire({
+        icon:'warning',
+        title:'Pesos negativos detectados en la importación',
+        html:
+          'Johnson requiere pesos <b>≥ 0</b>.<br>' +
+          `<div style="text-align:left;margin-top:8px"><b>Ejemplos:</b><br>${sample}${extra}</div>` +
+          '<div style="margin-top:10px">¿Deseas <b>convertirlos a 0</b> ahora?</div>',
+        showCancelButton:true,
+        confirmButtonText:'Convertir a 0',
+        cancelButtonText:'Dejar como están',
+        ...swalColors
+      })
+      if (resp.isConfirmed){
+        negs.forEach(({ id }) => {
+          const e = cy.$id(id)
+          const w = extractNumericWeight(e.data('weight'))
+          e.data('weight', String(Math.max(0, w)))
+        })
+        await Swal.fire({ icon:'success', title:'Normalización aplicada', text:'Los pesos negativos se establecieron en 0.', ...swalColors })
+      } else {
+        await Swal.fire({ icon:'info', title:'Importado con advertencia', html:'Podrás usar CPM, pero <b>Johnson estará bloqueado</b> hasta corregir los pesos negativos.', ...swalColors })
+      }
+    } else {
+      await Swal.fire({ icon:'success', title:'Importación completada', text:'El grafo se cargó correctamente.', confirmButtonText:'OK', ...swalColors })
+    }
     ev.target.value = ''
   }catch(e){
     console.error(e)

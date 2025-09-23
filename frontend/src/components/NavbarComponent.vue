@@ -56,7 +56,7 @@
                 Inicio
               </li>
 
-              <!-- Ayuda: en /pizarra y /johnson -->
+              <!-- Ayuda -->
               <li
                 v-if="!!helpCfg"
                 class="nav-link"
@@ -85,6 +85,7 @@
     :heading="helpCfg.heading"
     :youtube-url="helpCfg.youtubeUrl"
     :embed-query="helpCfg.embedQuery"
+    :pdf-url="helpCfg.pdfUrl"
     @close="isHelpOpen = false"
   />
 </template>
@@ -106,11 +107,11 @@ const goHome = () => {
   router.push('/')
 }
 
-// ✅ Navegaciones del submenú Algoritmos
 const goPizarra = () => {
   isOpen.value = false
   router.push('/pizarra')
 }
+
 const goJohnson = () => {
   isOpen.value = false
   router.push('/johnson')
@@ -121,11 +122,6 @@ const openHelp = () => {
   isHelpOpen.value = true
 }
 
-/**
- * Config de ayuda por ruta.
- * - Pizarra: video por defecto
- * - Johnson: TU video con query `si=...`
- */
 const helpCfg = computed(() => {
   const name = route.name?.toString().toLowerCase() || ''
   const path = route.path?.toString().toLowerCase() || ''
@@ -136,26 +132,26 @@ const helpCfg = computed(() => {
       heading: 'Tutorial',
       videoId,
       youtubeUrl: `https://youtu.be/${videoId}`,
-      embedQuery: '' // sin extra
+      embedQuery: '',
+      pdfUrl: '' // Puedes agregar uno aquí también si lo deseas
     }
   }
 
   if (name === 'johnson' || path === '/johnson') {
-    // 👇 Tu video de Johnson
     const videoId = 'ZJJhLHeQXoM'
     const si = 'IA050QXKmZ5Da7Jl'
     return {
       heading: 'Johnson: Tutorial',
       videoId,
       youtubeUrl: `https://youtu.be/${videoId}?si=${si}`,
-      embedQuery: `si=${si}` // se añade al iframe del embed
+      embedQuery: `si=${si}`,
+      pdfUrl: '/assets/pdf/johnson_guide.pdf' // ✅ debe estar en /public/assets/pdf/
     }
   }
 
   return null
 })
 
-/* Cierra el menú (y el modal si cambia de ruta) */
 watch(() => route.fullPath, () => {
   isOpen.value = false
   if (!helpCfg.value) isHelpOpen.value = false
@@ -163,7 +159,6 @@ watch(() => route.fullPath, () => {
 </script>
 
 <style lang="scss" scoped>
-/* (tus estilos tal cual) */
 $primary-color: #c8d9e6;
 $primary-color-light: rgba($primary-color, 0.2);
 $shadow-color: #e1e5ee;
@@ -171,12 +166,8 @@ $break-point: 768px;
 
 @import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@300&family=Poppins:wght@300&family=Bellota:wght@300;400;700&display=swap");
 
-*,
-*::before,
-*::after { box-sizing: border-box; margin: 0; padding: 0; }
-
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 .container { max-width: 1200px; padding: 0; margin: 0 auto; }
-
 ul, li { list-style: none; }
 
 nav {
@@ -185,7 +176,6 @@ nav {
   width: 100%;
   z-index: 50;
   font-family: "Poppins", sans-serif;
-
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -289,7 +279,6 @@ nav {
   }
 }
 
-/* ========================= RESPONSIVE ========================= */
 @media screen and (min-width: $break-point) {
   nav .nav-list {
     .nav-center { display: flex !important; }

@@ -13,7 +13,14 @@
         <div class="content">
           <div class="row weight">
             <label for="edgeWeight">Peso</label>
-            <input id="edgeWeight" ref="weightRef" type="number" step="any" v-model="localWeight" />
+            <input
+              id="edgeWeight"
+              ref="weightRef"
+              type="number"
+              step="any"
+              min="0"
+              v-model="localWeight"
+            />
           </div>
 
           <div v-if="!loop" class="row dir">
@@ -46,6 +53,7 @@
 
 <script setup>
 import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import Swal from 'sweetalert2'
 
 const props = defineProps({
   modelValue: { type: Boolean, required: true },
@@ -59,26 +67,52 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'confirm'])
 
 const weightRef = ref(null)
-const localWeight = ref(String(props.defaultWeight ?? '1'))
+const localWeight = ref('1')
 const currentDir = ref(props.initialDir)
 const openMenu = ref(false)
 const ddRef = ref(null)
 
-watch(() => props.modelValue, async (open) => {
-  if (open) {
-    localWeight.value = String(props.defaultWeight ?? '1')
-    currentDir.value = props.initialDir || 'forward'
-    openMenu.value = false
-    await nextTick()
-    weightRef.value?.focus?.()
-    weightRef.value?.select?.()
-    document.addEventListener('click', onDocClick, true)
-    document.addEventListener('keydown', onKey)
-  } else {
-    document.removeEventListener('click', onDocClick, true)
-    document.removeEventListener('keydown', onKey)
+/* ========= Helpers de normalización / validación ========= */
+function parseWeightForInput(raw) {
+  // Toma la última línea (si viene con "h=..." arriba), y devuelve string
+  const str = String(raw ?? '').split('\n').pop().trim()
+  // Si no es número, vuelve a '1' para no bloquear el input
+  const num = Number(str)
+  return Number.isFinite(num) ? String(num) : '1'
+}
+function parseWeightNumber(raw) {
+  const str = String(raw ?? '').split('\n').pop().trim()
+  const val = Number(str)
+  return Number.isFinite(val) ? val : NaN
+}
+async function showNegativeWeightAlert() {
+  await Swal.fire({
+    icon: 'warning',
+    title: 'Peso inválido',
+    html:
+      'No se permiten <b>pesos negativos</b> ni valores no numéricos en las aristas.<br>' +
+      'Use pesos <b>≥ 0</b>.',
+  })
+}
+
+watch(
+  () => props.modelValue,
+  async (open) => {
+    if (open) {
+      localWeight.value = parseWeightForInput(props.defaultWeight)
+      currentDir.value = props.initialDir || 'forward'
+      openMenu.value = false
+      await nextTick()
+      weightRef.value?.focus?.()
+      weightRef.value?.select?.()
+      document.addEventListener('click', onDocClick, true)
+      document.addEventListener('keydown', onKey)
+    } else {
+      document.removeEventListener('click', onDocClick, true)
+      document.removeEventListener('keydown', onKey)
+    }
   }
-})
+)
 
 onMounted(() => {
   if (props.modelValue) {
@@ -102,10 +136,19 @@ function pick(dir) { currentDir.value = dir; openMenu.value = false }
 function labelFor(dir) { return dir === 'forward' ? '→' : dir === 'reverse' ? '←' : '↔︎' }
 
 function close() { emit('update:modelValue', false) }
-function confirm() {
-  const weight = (localWeight.value ?? '').toString().trim() || '1'
+
+async function confirm() {
+  // Normaliza y valida el peso:
+  const num = parseWeightNumber(localWeight.value)
+  if (!Number.isFinite(num) || num < 0) {
+    await showNegativeWeightAlert()
+    return
+  }
+  const cleanWeight = String(num)
+
   const dir = props.loop ? 'forward' : (currentDir.value || 'forward')
-  emit('confirm', { weight, dir }); close()
+  emit('confirm', { weight: cleanWeight, dir })
+  close()
 }
 </script>
 
@@ -119,23 +162,22 @@ function confirm() {
 @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
 
 .edge-modal {
-  width: min(86vw, 360px);         /* más estrecho */
-  /* ↓ Clave: nada de min-height para que no “reserve” aire */
+  width: min(86vw, 360px);
   min-height: unset;
   background: #2c2f3a;
   border: 1px solid rgba(255,255,255,.08);
   border-radius: 14px;
   box-shadow: 0 16px 48px rgba(0,0,0,.5);
   color: #e7e7ec;
-  padding: 10px 12px;              /* más compacto */
-  overflow: visible;                /* el dropdown puede salirse sin forzar altura */
+  padding: 10px 12px;
+  overflow: visible;
 }
 
 .modal-head {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center; gap: 6px;
-  margin-bottom: 4px;               /* menos margen */
+  margin-bottom: 4px;
   .modal-title { grid-column: 2; margin: 0; font-size: 18px; text-align: center; }
   .btn-icon {
     grid-column: 3; justify-self: end;
@@ -149,7 +191,7 @@ function confirm() {
 
 .row.weight {
   display: flex; align-items: center; justify-content: center; gap: 8px;
-  margin: 4px 0 8px;                /* más corto */
+  margin: 4px 0 8px;
   label { font-weight: 600; }
   input {
     margin: 0; padding: 6px 8px;
@@ -187,7 +229,7 @@ function confirm() {
 }
 
 .actions {
-  margin-top: 6px;                  /* mínimo */
+  margin-top: 6px;
   display: flex; justify-content: center; gap: 8px;
   .btn { padding: 8px 12px; border-radius: 10px; border: none; cursor: pointer; font-weight: 700; color: #ecebe6; }
   .btn-ok     { background: #567c8d; }
