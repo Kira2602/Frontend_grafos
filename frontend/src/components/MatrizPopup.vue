@@ -9,19 +9,29 @@
           </button>
         </div>
 
+        <!-- leyenda opcional -->
+        <div v-if="showLegend" class="legend">
+          <span class="chip match">Asignado</span>
+          <span class="chip heat" v-if="heatmap">Heatmap (modo: {{ heatModeLabel }})</span>
+          <span class="chip total" v-if="typeof total==='number'">Total: {{ total }}</span>
+        </div>
+
         <div class="table-wrap">
           <table class="matrix-table">
             <thead>
               <tr>
                 <th class="corner"></th>
-                <!-- Fallback visual si llega string vacío -->
-                <th v-for="(n, i) in nodes" :key="'c'+i">{{ n || ('N' + (i+1)) }}</th>
+                <th v-for="(c, j) in colHeads" :key="'c'+j">{{ c }}</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(row, i) in matrix" :key="'r'+i">
-                <th class="row-head">{{ nodes[i] || ('N' + (i+1)) }}</th>
-                <td v-for="(val, j) in row" :key="'x'+i+'-'+j">{{ val }}</td>
+              <tr v-for="(row, i) in body" :key="'r'+i">
+                <th class="row-head">{{ rowHeads[i] }}</th>
+                <td v-for="(val, j) in row" :key="'x'+i+'-'+j"
+                    :class="cellClass(i,j)"
+                    :style="cellStyle(i,j,val)">
+                  {{ val }}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -36,13 +46,114 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+
+/* 🔧 Props nuevas son opcionales y no rompen uso anterior */
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
-  nodes: { type: Array, default: () => [] },
-  matrix: { type: Array, default: () => [] },
+
+  /* Compat: tu API original */
+  nodes:   { type: Array, default: () => [] },
+  matrix:  { type: Array, default: () => [] },
+
+  /* Opcional para asignación: cabeceras rectangulares L×R */
+  rowLabels: { type: Array, default: null }, // ej. L
+  colLabels: { type: Array, default: null }, // ej. R
+
+  /* Resultado del algoritmo: pares (i,j) 0-based dentro de body */
+  matches:   { type: Array,  default: () => [] }, // ej. [[0,3],[1,0],...]
+  total:     { type: Number, default: null },
+
+  /* Heatmap opcional */
+  heatmap:   { type: Boolean, default: false },
+  /* 'min' → color por “costo” (más oscuro = más alto)
+     'max' → color por “beneficio” (más oscuro = más alto) */
+  heatMode:  { type: String, default: 'min' }, // 'min' | 'max'
 })
+
 const emit = defineEmits(['update:modelValue'])
 const close = () => emit('update:modelValue', false)
+
+/* --------- Datos base (retro-compat o rectangular) --------- */
+const body = computed(() => {
+  // Si vienen rowLabels/colLabels, asumimos matriz rectangular directa.
+  if (Array.isArray(props.rowLabels) && Array.isArray(props.colLabels) && props.rowLabels.length) {
+    return props.matrix
+  }
+  // Si no, usamos tu forma original (cuadrada con 'nodes' como cabeceras)
+  return props.matrix
+})
+
+const rowHeads = computed(() => {
+  if (props.rowLabels?.length) return props.rowLabels.map((x,i) => String(x || `L${i+1}`))
+  if (props.nodes?.length)     return props.nodes.map((x,i) => String(x || `N${i+1}`))
+  return (body.value || []).map((_,i) => `N${i+1}`)
+})
+
+const colHeads = computed(() => {
+  if (props.colLabels?.length) return props.colLabels.map((x,i) => String(x || `R${i+1}`))
+  if (props.nodes?.length)     return props.nodes.map((x,i) => String(x || `N${i+1}`))
+  const n = (body.value?.[0]?.length) || 0
+  return Array.from({ length: n }, (_,i) => `N${i+1}`)
+})
+
+/* --------- Heatmap (normalización) --------- */
+function flattenNumbers() {
+  const out = []
+  for (const r of (body.value || [])) {
+    for (const v of (r || [])) {
+      const n = Number(v)
+      if (Number.isFinite(n)) out.push(n)
+    }
+  }
+  return out
+}
+const [minVal, maxVal] = (() => {
+  const arr = flattenNumbers()
+  if (!arr.length) return [0, 1]
+  return [Math.min(...arr), Math.max(...arr)]
+})()
+
+/* --------- helpers de estado ---------- */
+const matchSet = computed(() => new Set((props.matches || []).map(([i,j]) => `${i}-${j}`)))
+const showLegend = computed(() => (props.matches?.length || props.heatmap || typeof props.total === 'number'))
+const heatModeLabel = computed(() => props.heatMode === 'max' ? 'maximizar' : 'minimizar')
+
+/* --------- clases/estilos de celdas --------- */
+function cellClass(i, j) {
+  const isMatch = matchSet.value.has(`${i}-${j}`)
+  return {
+    match: isMatch
+  }
+}
+
+function colorFor(val) {
+  if (!props.heatmap) return null
+  const num = Number(val)
+  if (!Number.isFinite(num)) return null
+
+  // Normalización [0,1]
+  let t = (maxVal === minVal) ? 0 : (num - minVal) / (maxVal - minVal)
+  // Para 'min', un valor ALTO es “peor” → color más intenso
+  // Para 'max', un valor ALTO es “mejor” → color más intenso (mismo gradiente)
+  // Usamos un azul con alfa variable.
+  const alpha = 0.10 + 0.35 * t   // entre 0.10 y 0.45
+  return `rgba(94, 180, 255, ${alpha})`
+}
+
+function cellStyle(i, j, val) {
+  const styles = {}
+  const base = colorFor(val)
+  if (base) styles.background = base
+
+  // Si está asignado, reforzamos borde y fondo
+  if (matchSet.value.has(`${i}-${j}`)) {
+    styles.outline = '2px solid #5eb4ff'
+    styles.boxShadow = 'inset 0 0 0 9999px rgba(94,180,255,.22)'
+    styles.fontWeight = '700'
+  }
+  return styles
+}
 </script>
 
 <style scoped lang="scss">
@@ -56,17 +167,38 @@ const close = () => emit('update:modelValue', false)
 .header h3{margin:0;font-weight:800}
 .btn-icon{position:absolute;right:6px;top:2px;border:0;background:transparent;color:#bfc5d1;cursor:pointer}
 .btn-icon:hover{color:#fff}
+
+/* Leyenda */
+.legend{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.chip{padding:4px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.15);font-weight:700;opacity:.9}
+.chip.match{background:#20354d}
+.chip.heat{background:#1e2b3a}
+.chip.total{background:#38422e}
+
 .table-wrap{max-inline-size:90vw;max-block-size:62vh;overflow:auto}
 
 /* Tabla */
 .matrix-table{border-collapse:collapse;border-spacing:0;inline-size:max-content;background:#2c2f3a;font-size:14px}
 .matrix-table th,.matrix-table td{
   padding:6px 8px;text-align:center;border:1px solid rgba(255,255,255,.12);
-  white-space:nowrap;min-inline-size:34px;color:#e7e7ec; /* asegurar contraste */
+  white-space:nowrap;min-inline-size:34px;color:#e7e7ec;
 }
 .matrix-table thead th{position:sticky;top:0;z-index:1;background:#3a3f4e;font-weight:700}
 .matrix-table .row-head{position:sticky;left:0;background:#3a3f4e;text-align:left;padding-inline:10px;min-inline-size:42px}
 .matrix-table .corner{position:sticky;left:0;top:0;z-index:2;background:#3a3f4e;min-inline-size:42px;border-right:1px solid rgba(255,255,255,.12)}
+
+/* Asignadas */
+.matrix-table td.match{
+  position:relative;
+  background:rgba(94,180,255,.18) !important;
+}
+.matrix-table td.match::after{
+  content:'';
+  position:absolute; inset:0;
+  box-shadow:inset 0 0 0 2px #5eb4ff;
+  border-radius:2px;
+  pointer-events:none;
+}
 
 .actions{display:flex;justify-content:center}
 .btn{background:#567c8d;color:#ecebe6;border:0;padding:8px 14px;border-radius:10px;cursor:pointer;font-weight:700}

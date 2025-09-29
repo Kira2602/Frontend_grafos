@@ -41,6 +41,15 @@
                   >
                     Johnson
                   </li>
+                  <li
+                    role="menuitem"
+                    tabindex="0"
+                    @click="goAsignacion"
+                    @keydown.enter="goAsignacion"
+                    aria-label="Ir a Algoritmo de Asignacion"
+                  >
+                    Asignacion
+                  </li>
                 </ul>
               </li>
 
@@ -115,6 +124,11 @@ const goPizarra = () => {
 const goJohnson = () => {
   isOpen.value = false
   router.push('/johnson')
+}
+
+const goAsignacion = () => {
+  isOpen.value = false
+  router.push('/asignacion')
 }
 
 const openHelp = () => {
