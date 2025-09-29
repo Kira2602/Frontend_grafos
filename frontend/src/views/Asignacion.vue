@@ -110,12 +110,11 @@
     />
 <MatrizPopup
   v-model="showMatriz"
-  :nodes="matrizLabels"
   :matrix="LRmatrix"  
   :row-labels="Llabels"
   :col-labels="Rlabels"
   :matches="assignPairs"
-  :total="assignTotal"
+  :total="assignDisplayTotal"
   :heatmap="true"
   :heat-mode="assignMode"
 />
@@ -166,6 +165,7 @@ import 'sweetalert2/dist/sweetalert2.min.css'
 const cyRef = ref(null)
 const boardRef = ref(null)
 let cy = null
+const assignDisplayTotal = ref(null) // lo que se muestra en el chip "Total"
 
 /* ===== MODAL DE OPCIONES ===== */
 const showOptions = ref(false)
@@ -308,13 +308,11 @@ function onSolved({ L, R, M, pairs, total, mode }) {
   Rlabels.value     = R
   LRmatrix.value    = M
   assignPairs.value = pairs
-  assignTotal.value = total
+  assignDisplayTotal.value = total
   assignMode.value  = mode
   showMatriz.value  = true
 }
 
-const matrizLabels = ref([])
-const matrizValues = ref([])
 
 function extractNumericWeight(raw){
   const last = String(raw ?? '').split('\n').pop().trim()
@@ -376,8 +374,9 @@ function recomputeLRForPopup(mode = assignMode.value){
   Rlabels.value = R
   LRmatrix.value = M
   assignPairs.value = []   // sin resolver aún
-  assignTotal.value = null
+  assignDisplayTotal.value = null
   assignMode.value = mode
+  return { L, R, M }
 }
 
 function openMatriz () {
@@ -414,8 +413,7 @@ async function onOptionsConfirm({ mode, allowUnassigned }){
   }
 
   // Resolver
-  const { pairs, total } = hungarianAssign(costMatrix, { allowUnassigned })
-
+    const { pairs, total: costTotal } = hungarianAssign(costMatrix, { allowUnassigned })
   // Pintar grafo y recolectar pares elegidos
   const chosen = []
   pairs.forEach(([i, j]) => {
@@ -438,13 +436,28 @@ async function onOptionsConfirm({ mode, allowUnassigned }){
     return Number.isFinite(w) ? w : 0
   }))
 
+
+    // 🧮 Total a mostrar (costo real si min, beneficio real si max)
+  let displayTotal = costTotal
+  if (mode === 'max') {
+    displayTotal = pairs.reduce((sum, [i, j]) => {
+      if (i < 0 || j < 0) return sum
+     const u = li[i], v = rj[j]
+      const eid = edgesMap.get(`${u}->${v}`)
+      if (!eid) return sum
+      const w = extractNumericWeight(cy.$id(eid).data('weight'))
+      return sum + (Number.isFinite(w) ? w : 0)
+    }, 0)
+  }
+  assignDisplayTotal.value = displayTotal
+
   // ✅ ahora SÍ usamos onSolved
   onSolved({
     L,               // etiquetas/ids (ordenado como L)
     R,               // etiquetas/ids (ordenado como R)
     M,               // matriz L×R de costos/beneficios originales
     pairs,           // índices elegidos (i,j) 0-based
-    total,           // costo/beneficio total según modo
+    total: displayTotal,
     mode             // 'min' | 'max'
   })
 
@@ -455,7 +468,7 @@ async function onOptionsConfirm({ mode, allowUnassigned }){
       <div style="text-align:left">
         <b>Pares asignados:</b><br>
         ${chosen.length ? chosen.map(([u,v])=>`${u} → ${v}`).join('<br>') : '(vacío)'}
-        <br><br><b>Total:</b> ${total}
+        <br><br><b>Total:</b> ${displayTotal}
       </div>
     `,
     ...swalColors
@@ -894,8 +907,8 @@ const suggestedBaseName = computed(() => defaultBaseName())
 /* ========= Exportar con nombre ========= */
 async function getCompositePngBlob(){
   const boardCanvas = await getBoardCanvas()
-  const { labels, matrix } = recomputeLRForPopup()
-  const matCanvas = renderMatrixCanvas(labels, matrix, { scale: 2 })
+  const { L, R, M } = recomputeLRForPopup()
+  const matCanvas = renderRectMatrixCanvas(L, R, M, { scale: 2 })
   const composed = composeVerticalCanvas(boardCanvas, matCanvas, 18)
   return await canvasToBlob(composed, 'image/png')
 }
@@ -907,8 +920,8 @@ async function getPdfBlobWithMatrix(){
   const { jsPDF } = jsPDFmod
 
   const boardCanvas = await getBoardCanvas()
-  const { labels, matrix } = recomputeLRForPopup()
-  const matCanvas = renderMatrixCanvas(labels, matrix, { scale: 2 })
+  const { L, R, M } = recomputeLRForPopup()
+ const matCanvas = renderRectMatrixCanvas(L, R, M, { scale: 2 })
 
   const doc = new jsPDF({ orientation: boardCanvas.width >= boardCanvas.height ? 'l' : 'p', unit: 'pt', compress: true })
   const margin = 24
@@ -948,6 +961,72 @@ async function exportPDF(base){
     ...swalColors
   })
 }
+
+function renderRectMatrixCanvas(L, R, M, { scale = 2 } = {}) {
+  const rowH = 28, headH = 32
+  const padL = 14, padC = 12
+  const ctxTmp = document.createElement('canvas').getContext('2d')
+  ctxTmp.font = '700 14px Poppins, sans-serif'
+
+  let rowLabelW = 42
+  L.forEach(t => { rowLabelW = Math.max(rowLabelW, Math.ceil(ctxTmp.measureText(String(t)).width) + padL) })
+
+  let colW = 32
+  R.forEach(t => { colW = Math.max(colW, Math.ceil(ctxTmp.measureText(String(t)).width) + padC) })
+  M.forEach(r => r.forEach(v => {
+    colW = Math.max(colW, Math.ceil(ctxTmp.measureText(String(v)).width) + padC)
+  }))
+
+  const w = rowLabelW + R.length * colW
+  const h = headH + L.length * rowH
+
+  const c = document.createElement('canvas')
+  c.width = Math.round(w * scale)
+  c.height = Math.round(h * scale)
+  const ctx = c.getContext('2d')
+  ctx.scale(scale, scale)
+
+  ctx.fillStyle = '#2c2f3a'; ctx.fillRect(0,0,w,h)
+  ctx.fillStyle = '#3a3f4e'; ctx.fillRect(0,0,w,headH)  // header columnas
+  ctx.fillRect(0,0,rowLabelW,h)                         // header filas
+
+  ctx.strokeStyle = 'rgba(255,255,255,.14)'
+  ctx.lineWidth = 1
+  for (let j = 0; j <= R.length; j++) {
+    const x = Math.floor(rowLabelW + j * colW) + .5
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke()
+  }
+  for (let i = 0; i <= L.length; i++) {
+    const y = Math.floor(headH + i * rowH) + .5
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke()
+  }
+
+  ctx.fillStyle = '#e7e7ec'
+  ctx.textBaseline = 'middle'
+  ctx.font = '700 14px Poppins, sans-serif'
+  // columnas
+  R.forEach((t, j) => {
+    const x = rowLabelW + j * colW + colW/2
+    ctx.fillText(String(t), x - ctx.measureText(String(t)).width/2, headH/2)
+  })
+  // filas
+  L.forEach((t, i) => {
+    const y = headH + i * rowH + rowH/2
+    ctx.fillText(String(t), 8, y)
+  })
+  // valores
+  ctx.font = '600 14px Poppins, sans-serif'
+  for (let i=0;i<L.length;i++){
+    for (let j=0;j<R.length;j++){
+      const val = String(M[i][j] ?? '')
+      const x = rowLabelW + j*colW + colW/2
+      const y = headH + i*rowH + rowH/2
+      ctx.fillText(val, x - ctx.measureText(val).width/2, y)
+    }
+  }
+  return c
+}
+
 
 function getJsonBlob(){
   const json = serializeGraph()
