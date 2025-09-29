@@ -12,6 +12,9 @@ const goToPizarra = () => {
 const goToJohnson = () => {                     
   router.push({ name: 'johnson' })
 }
+const goToAsignacion = () => {
+  router.push({ name: 'asignacion' })
+}
 
 function onHeroCta () {
   const section = document.getElementById('cards')
@@ -105,16 +108,16 @@ onMounted(() => {
                 <div class="image-content">
                   <span class="overlay"></span>
                   <div class="card-image">
-                    <img src="../assets/img/enproceso.jpg" alt="" class="card-img" />
+                    <img src="../assets/img/alg_asignacion.png" alt="" class="card-img" />
                   </div>
                 </div>
                 <div class="card-content">
-                  <h2 class="name">Algoritmo</h2>
+                  <h2 class="name">Algoritmo De Asignación</h2>
                   <p class="description">
-                    The lorem text the section that contains header with having open functionality.
-                    Lorem dolor sit amet consectetur adipisicing elit.
+                    En la pizarra de grafos aplica el algoritmo de Asignación para maximizar el beneficio o minimizar el costo, 
+                    además de exportar e importar tu algoritmo. 
                   </p>
-                  <button class="button">Iniciar</button>
+                  <button class="button" @click="goToAsignacion">Iniciar</button>
                 </div>
               </div>
             </div>

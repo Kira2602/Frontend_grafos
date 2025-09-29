@@ -117,6 +117,7 @@
   :total="assignDisplayTotal"
   :heatmap="true"
   :heat-mode="assignMode"
+  :extrema-only="true" 
 />
 
     <NombreArchivoPopup
@@ -127,7 +128,6 @@
     />
 
     <!-- ⚙️ Opciones de Asignación -->
-    <!-- IMPORTANTE: asegura el nombre del archivo del modal -->
     <AsignacionOptions
       v-model="showOptions"
       :l-count="bpInfo.lCount"
@@ -206,7 +206,6 @@ const edgeCtx = ref({
   sourceLabel: '', targetLabel: '', defaultWeight: '1', initialDir: 'forward'
 })
 
-
 function openEdgeProps({ sId, tId, editId = null, defaultWeight = '1', initialDir = 'forward' }) {
   const s = cy.$id(sId); const t = cy.$id(tId)
   edgeCtx.value = {
@@ -219,8 +218,46 @@ function openEdgeProps({ sId, tId, editId = null, defaultWeight = '1', initialDi
   showEdgeProps.value = true
 }
 
+/* === Reglas "sin retornos" (sin opuesta ni ciclos) igual que Johnson === */
+function hasOppositeEdge(u, v, ignoreId=null){
+  const sel = cy.$(`edge[source="${v}"][target="${u}"]`)
+  if (sel.empty()) return false
+  if (!ignoreId) return true
+  return sel.some(e => e.id() !== ignoreId)
+}
+function wouldIntroduceCycle(u, v, ignoreId=null){
+  if (u === v) return true
+  const seen = new Set([v])
+  const stack = [v]
+  while (stack.length){
+    const x = stack.pop()
+    if (x === u) return true
+    cy.$(`edge[source="${x}"]`).forEach(e => {
+      if (ignoreId && e.id() === ignoreId) return
+      const y = e.target().id()
+      if (!seen.has(y)){ seen.add(y); stack.push(y) }
+    })
+  }
+  return false
+}
+async function showReturnAlert(){
+  await Swal.fire({
+    icon: 'warning',
+    title: 'Dirección de retorno no permitida',
+    html: 'No se permiten <b>nodos de retorno</b> para esta herramienta.<br>El grafo debe tener <b>una sola dirección</b> (sin retornos ni ciclos).',
+    ...swalColors
+  })
+}
+function canAddDirectedEdge(u, v, { ignoreId=null } = {}){
+  if (u === v) return false
+  if (hasOppositeEdge(u, v, ignoreId)) return false
+  if (wouldIntroduceCycle(u, v, ignoreId)) return false
+  return true
+}
+
 /* Para asignación NO necesitamos bloquear retornos al construir,
    pero sí evitamos loops y duplicados exactos */
+/* ⬆️ NOTA: ahora SÍ bloqueamos retornos/ciclos al confirmar el popup (ver onEdgePropsConfirm) */
 function ensureEdge(source, target, weight){
   if (source === target) return
   const existing = cy.$(`edge[source="${source}"][target="${target}"]`)
@@ -230,8 +267,18 @@ function ensureEdge(source, target, weight){
 
 async function onEdgePropsConfirm({ weight, dir }) {
   const { sId, tId, editId, isLoop } = edgeCtx.value
-  // sin "both": el matching se hace en L->R y la dirección ya la define tu herramienta Conectar
+
+  // No permitir “ambas direcciones”
+  if (dir === 'both') { await showReturnAlert(); return }
+
+  // Resolver dirección propuesta
   const proposal = (isLoop || dir === 'forward') ? { u: sId, v: tId } : { u: tId, v: sId }
+
+  // Validar contra retornos/ciclos (igual que en Johnson.vue)
+  if (!canAddDirectedEdge(proposal.u, proposal.v, { ignoreId: editId })) {
+    await showReturnAlert()
+    return
+  }
 
   if (editId) {
     const ele = cy.$id(editId)
@@ -304,15 +351,14 @@ const assignMode   = ref('min') // 'min' | 'max'
 
 // ejemplo: después de resolver
 function onSolved({ L, R, M, pairs, total, mode }) {
-  Llabels.value     = L
-  Rlabels.value     = R
+  Llabels.value     = L.map(labelOf)   // ⬅️ nombres visibles
+  Rlabels.value     = R.map(labelOf)
   LRmatrix.value    = M
   assignPairs.value = pairs
   assignDisplayTotal.value = total
   assignMode.value  = mode
   showMatriz.value  = true
 }
-
 
 function extractNumericWeight(raw){
   const last = String(raw ?? '').split('\n').pop().trim()
@@ -322,8 +368,9 @@ function extractNumericWeight(raw){
 
 function labelOf(id){
   const n = cy.$id(id)
-  const lbl = (n.data('label') || '').toString()
-  return lbl.split('\n')[0] || id
+  const raw = !n.empty() ? n.data('label') : id
+  const s = (raw ?? id).toString()
+  return s.split('\n')[0] || id
 }
 
 /* 🔵 Pintar elección y atenuar lo demás */
@@ -370,13 +417,19 @@ function recomputeLRForPopup(mode = assignMode.value){
     const w = extractNumericWeight(cy.$id(eid).data('weight'))
     return Number.isFinite(w) ? w : 0
   }))
-  Llabels.value = L
-  Rlabels.value = R
+
+  const Lnames = L.map(labelOf)
+  const Rnames = R.map(labelOf)
+
+  Llabels.value = Lnames
+  Rlabels.value = Rnames
   LRmatrix.value = M
   assignPairs.value = []   // sin resolver aún
   assignDisplayTotal.value = null
   assignMode.value = mode
-  return { L, R, M }
+
+  // ⬅️ devolvemos los NOMBRES para exportaciones (PNG/PDF)
+  return { L: Lnames, R: Rnames, M }
 }
 
 function openMatriz () {
@@ -385,7 +438,6 @@ function openMatriz () {
   }
   showMatriz.value = true
 }
-
 
 /* ======= RESOLVER ASIGNACIÓN ======= */
 function summarizeBipartition(){
@@ -413,7 +465,8 @@ async function onOptionsConfirm({ mode, allowUnassigned }){
   }
 
   // Resolver
-    const { pairs, total: costTotal } = hungarianAssign(costMatrix, { allowUnassigned })
+  const { pairs, total: costTotal } = hungarianAssign(costMatrix, { allowUnassigned })
+
   // Pintar grafo y recolectar pares elegidos
   const chosen = []
   pairs.forEach(([i, j]) => {
@@ -436,13 +489,12 @@ async function onOptionsConfirm({ mode, allowUnassigned }){
     return Number.isFinite(w) ? w : 0
   }))
 
-
-    // 🧮 Total a mostrar (costo real si min, beneficio real si max)
+  // 🧮 Total a mostrar (costo real si min, beneficio real si max)
   let displayTotal = costTotal
   if (mode === 'max') {
     displayTotal = pairs.reduce((sum, [i, j]) => {
       if (i < 0 || j < 0) return sum
-     const u = li[i], v = rj[j]
+      const u = li[i], v = rj[j]
       const eid = edgesMap.get(`${u}->${v}`)
       if (!eid) return sum
       const w = extractNumericWeight(cy.$id(eid).data('weight'))
@@ -474,10 +526,6 @@ async function onOptionsConfirm({ mode, allowUnassigned }){
     ...swalColors
   })
 }
-
-
-
-
 
 /* ===================== CY INIT ===================== */
 onMounted(() => {
@@ -921,7 +969,7 @@ async function getPdfBlobWithMatrix(){
 
   const boardCanvas = await getBoardCanvas()
   const { L, R, M } = recomputeLRForPopup()
- const matCanvas = renderRectMatrixCanvas(L, R, M, { scale: 2 })
+  const matCanvas = renderRectMatrixCanvas(L, R, M, { scale: 2 })
 
   const doc = new jsPDF({ orientation: boardCanvas.width >= boardCanvas.height ? 'l' : 'p', unit: 'pt', compress: true })
   const margin = 24
@@ -1026,7 +1074,6 @@ function renderRectMatrixCanvas(L, R, M, { scale = 2 } = {}) {
   }
   return c
 }
-
 
 function getJsonBlob(){
   const json = serializeGraph()
@@ -1187,7 +1234,6 @@ async function importJSON(ev){
     Swal.fire({ icon:'error', title:'Importación fallida', text:'El archivo no tiene el formato esperado o está dañado.', ...swalColors })
   }
 }
-
 
 async function handleExport(type){
   pendingExportType.value = type

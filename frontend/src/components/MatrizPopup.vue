@@ -27,9 +27,12 @@
             <tbody>
               <tr v-for="(row, i) in body" :key="'r'+i">
                 <th class="row-head">{{ rowHeads[i] }}</th>
-                <td v-for="(val, j) in row" :key="'x'+i+'-'+j"
-                    :class="cellClass(i,j)"
-                    :style="cellStyle(i,j,val)">
+                <td
+                  v-for="(val, j) in row"
+                  :key="'x'+i+'-'+j"
+                  :class="cellClass(i,j)"
+                  :style="cellStyle(i,j,val)"
+                >
                   {{ val }}
                 </td>
               </tr>
@@ -48,27 +51,23 @@
 <script setup>
 import { computed } from 'vue'
 
-/* 🔧 Props nuevas son opcionales y no rompen uso anterior */
+/* 🔧 Props (compatibles con tu API) */
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
-
-  /* Compat: tu API original */
+  // Compat anterior (cuadrada con 'nodes')
   nodes:   { type: Array, default: () => [] },
   matrix:  { type: Array, default: () => [] },
-
-  /* Opcional para asignación: cabeceras rectangulares L×R */
-  rowLabels: { type: Array, default: null }, // ej. L
-  colLabels: { type: Array, default: null }, // ej. R
-
-  /* Resultado del algoritmo: pares (i,j) 0-based dentro de body */
-  matches:   { type: Array,  default: () => [] }, // ej. [[0,3],[1,0],...]
+  // Rectangular L×R (asignación)
+  rowLabels: { type: Array, default: null },
+  colLabels: { type: Array, default: null },
+  // Resultado hungarian
+  matches:   { type: Array,  default: () => [] }, // [[i,j], ...] 0-based
   total:     { type: Number, default: null },
-
-  /* Heatmap opcional */
+  // Heatmap y modo
   heatmap:   { type: Boolean, default: false },
-  /* 'min' → color por “costo” (más oscuro = más alto)
-     'max' → color por “beneficio” (más oscuro = más alto) */
   heatMode:  { type: String, default: 'min' }, // 'min' | 'max'
+  // 🔵 NUEVO: pintar solo extremos (min o max global)
+  extremaOnly: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['update:modelValue'])
@@ -76,29 +75,27 @@ const close = () => emit('update:modelValue', false)
 
 /* --------- Datos base (retro-compat o rectangular) --------- */
 const body = computed(() => {
-  // Si vienen rowLabels/colLabels, asumimos matriz rectangular directa.
   if (Array.isArray(props.rowLabels) && Array.isArray(props.colLabels) && props.rowLabels.length) {
     return props.matrix
   }
-  // Si no, usamos tu forma original (cuadrada con 'nodes' como cabeceras)
   return props.matrix
 })
 
 const rowHeads = computed(() => {
-  if (props.rowLabels?.length) return props.rowLabels.map((x,i) => String(x || `L${i+1}`))
-  if (props.nodes?.length)     return props.nodes.map((x,i) => String(x || `N${i+1}`))
+  if (props.rowLabels?.length) return props.rowLabels.map((x,i) => String(x ?? `L${i+1}`))
+  if (props.nodes?.length)     return props.nodes.map((x,i) => String(x ?? `N${i+1}`))
   return (body.value || []).map((_,i) => `N${i+1}`)
 })
 
 const colHeads = computed(() => {
-  if (props.colLabels?.length) return props.colLabels.map((x,i) => String(x || `R${i+1}`))
-  if (props.nodes?.length)     return props.nodes.map((x,i) => String(x || `N${i+1}`))
+  if (props.colLabels?.length) return props.colLabels.map((x,i) => String(x ?? `R${i+1}`))
+  if (props.nodes?.length)     return props.nodes.map((x,i) => String(x ?? `N${i+1}`))
   const n = (body.value?.[0]?.length) || 0
   return Array.from({ length: n }, (_,i) => `N${i+1}`)
 })
 
-/* --------- Heatmap (normalización) --------- */
-function flattenNumbers() {
+/* --------- Normalización para gradiente (modo clásico) --------- */
+function flattenNumbers () {
   const out = []
   for (const r of (body.value || [])) {
     for (const v of (r || [])) {
@@ -108,46 +105,78 @@ function flattenNumbers() {
   }
   return out
 }
-const [minVal, maxVal] = (() => {
+const minVal = computed(() => {
   const arr = flattenNumbers()
-  if (!arr.length) return [0, 1]
-  return [Math.min(...arr), Math.max(...arr)]
-})()
+  return arr.length ? Math.min(...arr) : 0
+})
+const maxVal = computed(() => {
+  const arr = flattenNumbers()
+  return arr.length ? Math.max(...arr) : 1
+})
 
-/* --------- helpers de estado ---------- */
+/* --------- Estado/leyenda ---------- */
 const matchSet = computed(() => new Set((props.matches || []).map(([i,j]) => `${i}-${j}`)))
 const showLegend = computed(() => (props.matches?.length || props.heatmap || typeof props.total === 'number'))
 const heatModeLabel = computed(() => props.heatMode === 'max' ? 'maximizar' : 'minimizar')
 
+/* --------- Extremos (min/max global) --------- */
+const extremeValue = computed(() => {
+  const vals = flattenNumbers()
+  if (!vals.length) return null
+  return props.heatMode === 'max' ? Math.max(...vals) : Math.min(...vals)
+})
+const EPS = 1e-9
+const extremeSet = computed(() => {
+  const set = new Set()
+  if (extremeValue.value == null) return set
+  const tgt = extremeValue.value
+  ;(body.value || []).forEach((row, i) => {
+    (row || []).forEach((v, j) => {
+      const n = Number(v)
+      if (Number.isFinite(n) && Math.abs(n - tgt) < EPS) set.add(`${i}-${j}`)
+    })
+  })
+  return set
+})
+function isExtreme (i,j) { return extremeSet.value.has(`${i}-${j}`) }
+function isAssigned(i,j) { return matchSet.value.has(`${i}-${j}`) }
+
 /* --------- clases/estilos de celdas --------- */
 function cellClass(i, j) {
-  const isMatch = matchSet.value.has(`${i}-${j}`)
+  const isMatch = isAssigned(i, j)
+  const isExt   = props.extremaOnly && props.heatmap && isExtreme(i, j)
   return {
-    match: isMatch
+    match: isMatch,
+    'is-extreme-min': isExt && props.heatMode === 'min',
+    'is-extreme-max': isExt && props.heatMode === 'max'
   }
 }
 
 function colorFor(val) {
-  if (!props.heatmap) return null
+  // En modo "extremos solamente" anulamos gradiente
+  if (!props.heatmap || props.extremaOnly) return null
   const num = Number(val)
   if (!Number.isFinite(num)) return null
 
   // Normalización [0,1]
-  let t = (maxVal === minVal) ? 0 : (num - minVal) / (maxVal - minVal)
-  // Para 'min', un valor ALTO es “peor” → color más intenso
-  // Para 'max', un valor ALTO es “mejor” → color más intenso (mismo gradiente)
-  // Usamos un azul con alfa variable.
-  const alpha = 0.10 + 0.35 * t   // entre 0.10 y 0.45
+  const minV = minVal.value
+  const maxV = maxVal.value
+  const t = (maxV === minV) ? 0 : (num - minV) / (maxV - minV)
+
+  // Gradiente azul (mismo para min/max; solo cambia interpretación)
+  const alpha = 0.10 + 0.35 * t   // 0.10 → 0.45
   return `rgba(94, 180, 255, ${alpha})`
 }
 
 function cellStyle(i, j, val) {
   const styles = {}
+
+  // Fondo por gradiente (solo si NO estamos en "extremos solamente")
   const base = colorFor(val)
   if (base) styles.background = base
 
-  // Si está asignado, reforzamos borde y fondo
-  if (matchSet.value.has(`${i}-${j}`)) {
+  // Resaltado de asignación (borde azul, compatible con extremos)
+  if (isAssigned(i, j)) {
     styles.outline = '2px solid #5eb4ff'
     styles.boxShadow = 'inset 0 0 0 9999px rgba(94,180,255,.22)'
     styles.fontWeight = '700'
@@ -198,6 +227,24 @@ function cellStyle(i, j, val) {
   box-shadow:inset 0 0 0 2px #5eb4ff;
   border-radius:2px;
   pointer-events:none;
+}
+
+/* 🎨 Extremos con color único (no compiten con 'match') */
+.matrix-table td.is-extreme-min{
+  background:#2d4637 !important;   /* verde oscuro */
+  color:#c9f7df !important;
+  outline:2px solid #42d392;
+}
+.matrix-table td.is-extreme-max{
+  background:#4a3b2b !important;   /* naranja oscuro */
+  color:#ffe1c2 !important;
+  outline:2px solid #ffb454;
+}
+
+/* Combinación: extremo + asignado (mantiene borde azul de match) */
+.matrix-table td.match.is-extreme-min,
+.matrix-table td.match.is-extreme-max{
+  /* El borde azul del ::after de .match se mantiene por encima */
 }
 
 .actions{display:flex;justify-content:center}

@@ -147,7 +147,7 @@ const helpCfg = computed(() => {
       videoId,
       youtubeUrl: `https://youtu.be/${videoId}`,
       embedQuery: '',
-      pdfUrl: '' // Puedes agregar uno aquí también si lo deseas
+      pdfUrl: '' // opcional para pizarra
     }
   }
 
@@ -159,7 +159,20 @@ const helpCfg = computed(() => {
       videoId,
       youtubeUrl: `https://youtu.be/${videoId}?si=${si}`,
       embedQuery: `si=${si}`,
-      pdfUrl: '/assets/pdf/johnson_guide.pdf' // ✅ debe estar en /public/assets/pdf/
+      pdfUrl: '/assets/pdf/johnson_guide.pdf'
+    }
+  }
+
+  // ✅ Ayuda para Asignación: usa tu video con el parámetro `si`
+  if (name === 'asignacion' || path === '/asignacion') {
+    const videoId = 'gUYPWANOpRw'
+    const si = '1r-cH1VDTjwgdFj3'
+    return {
+      heading: 'Asignación: Tutorial',
+      videoId,
+      youtubeUrl: `https://youtu.be/${videoId}?si=${si}`,
+      embedQuery: `si=${si}`,
+      pdfUrl: '/assets/pdf/asignacion_guide.pdf' // opcional, si no existe puedes dejarlo en ''
     }
   }
 
