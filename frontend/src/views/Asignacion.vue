@@ -458,7 +458,7 @@ async function onOptionsConfirm({ mode, allowUnassigned }){
   cy.nodes().removeClass('assigned')
   cy.edges().removeClass('assigned')
 
-  const { L, R, edgesMap, costMatrix, li, rj } = buildBipartiteFromCy(cy, { mode })
+  const { L, R, edgesMap, costMatrix, li, rj } = buildBipartiteFromCy(cy, { mode, allowUnassigned })
   if (!L.length || !R.length){
     await Swal.fire({ icon:'info', title:'Grafo no bipartito útil', text:'Asegúrate de tener nodos con solo salidas (L) y solo entradas (R), y aristas L→R.', ...swalColors })
     return

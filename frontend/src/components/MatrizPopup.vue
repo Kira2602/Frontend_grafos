@@ -115,7 +115,17 @@ const maxVal = computed(() => {
 })
 
 /* --------- Estado/leyenda ---------- */
-const matchSet = computed(() => new Set((props.matches || []).map(([i,j]) => `${i}-${j}`)))
+// Reemplaza tu matchSet por esto:
+const matchSet = computed(() => {
+  const rows = body.value?.length ?? 0
+  const cols = body.value?.[0]?.length ?? 0
+  const set = new Set()
+  ;(props.matches || []).forEach(([i, j]) => {
+    if (i >= 0 && j >= 0 && i < rows && j < cols) set.add(`${i}-${j}`)
+  })
+  return set
+})
+
 const showLegend = computed(() => (props.matches?.length || props.heatmap || typeof props.total === 'number'))
 const heatModeLabel = computed(() => props.heatMode === 'max' ? 'maximizar' : 'minimizar')
 
@@ -144,7 +154,15 @@ function isAssigned(i,j) { return matchSet.value.has(`${i}-${j}`) }
 /* --------- clases/estilos de celdas --------- */
 function cellClass(i, j) {
   const isMatch = isAssigned(i, j)
-  const isExt   = props.extremaOnly && props.heatmap && isExtreme(i, j)
+
+  // Si extremaOnly=true, solo pintamos extremo SI también está asignado.
+  // Si extremaOnly=false, se permite resaltar extremos aunque no estén asignados.
+  const isExt = props.heatmap && (
+    props.extremaOnly
+      ? (isMatch && isExtreme(i, j))
+      : isExtreme(i, j)
+  )
+
   return {
     match: isMatch,
     'is-extreme-min': isExt && props.heatMode === 'min',
@@ -244,7 +262,6 @@ function cellStyle(i, j, val) {
 /* Combinación: extremo + asignado (mantiene borde azul de match) */
 .matrix-table td.match.is-extreme-min,
 .matrix-table td.match.is-extreme-max{
-  /* El borde azul del ::after de .match se mantiene por encima */
 }
 
 .actions{display:flex;justify-content:center}
