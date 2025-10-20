@@ -3,6 +3,7 @@ import Home from '../views/Home.vue'
 import Pizarra_grafos from '../views/Pizarra_grafos.vue'  
 import Johnson from '../views/Johnson.vue'
 import Asignacion from '@/views/Asignacion.vue'
+import Sorts from '@/views/Sorts.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -27,6 +28,11 @@ const router = createRouter({
       name: 'asignacion',
       component: Asignacion,
     },
+    {
+      path: '/sorts',
+      name: 'sorts',
+      component: Sorts,
+    }
   ],
 })
 

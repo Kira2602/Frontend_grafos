@@ -21,7 +21,7 @@
             <ul class="nav-menu">
               <!-- Algoritmos -->
               <li class="nav-link" tabindex="0">
-                Algoritmos <i class="fa fa-chevron-up"></i>
+                Algoritmos <i class="fa fa-chevron-down"></i>
                 <ul class="nav-drop" role="menu">
                   <li
                     role="menuitem"
@@ -78,7 +78,16 @@
                 Ayuda
               </li>
 
-              <li class="nav-link" tabindex="0">Contacto</li>
+              <li
+                class="nav-link"
+                role="link"
+                tabindex="0"
+                @click="goSorts"
+                @keydown.enter="goSorts"
+                aria-label="Ir a Algoritmo de Ordenamiento"
+              >
+                Sorts
+              </li>
             </ul>
           </li>
         </ul>
@@ -131,6 +140,11 @@ const goAsignacion = () => {
   router.push('/asignacion')
 }
 
+const goSorts = () => {
+  isOpen.value = false
+  router.push('/sorts')
+}
+
 const openHelp = () => {
   isOpen.value = false
   isHelpOpen.value = true
@@ -147,7 +161,7 @@ const helpCfg = computed(() => {
       videoId,
       youtubeUrl: `https://youtu.be/${videoId}`,
       embedQuery: '',
-      pdfUrl: '' // opcional para pizarra
+      pdfUrl: '', // opcional para pizarra
     }
   }
 
@@ -159,7 +173,7 @@ const helpCfg = computed(() => {
       videoId,
       youtubeUrl: `https://youtu.be/${videoId}?si=${si}`,
       embedQuery: `si=${si}`,
-      pdfUrl: '/assets/pdf/johnson_guide.pdf'
+      pdfUrl: '/assets/pdf/johnson_guide.pdf',
     }
   }
 
@@ -172,17 +186,32 @@ const helpCfg = computed(() => {
       videoId,
       youtubeUrl: `https://youtu.be/${videoId}?si=${si}`,
       embedQuery: `si=${si}`,
-      pdfUrl: '/assets/pdf/asignacion_guide.pdf' // opcional, si no existe puedes dejarlo en ''
+      pdfUrl: '/assets/pdf/asignacion_guide.pdf', // opcional, si no existe puedes dejarlo en ''
+    }
+  }
+
+  if (name === 'sorts' || path === '/sorts') {
+    const videoId = 'hF7X8kzjKcM'
+    const si = 'qX4mJYk1b8mO5O3D'
+    return {
+      heading: 'Sorts: Tutorial',
+      videoId,
+      youtubeUrl: `https://youtu.be/${videoId}?si=${si}`,
+      embedQuery: `si=${si}`,
+      pdfUrl: '/assets/pdf/sorts_guide.pdf', // opcional, si no existe puedes dejarlo en ''
     }
   }
 
   return null
 })
 
-watch(() => route.fullPath, () => {
-  isOpen.value = false
-  if (!helpCfg.value) isHelpOpen.value = false
-})
+watch(
+  () => route.fullPath,
+  () => {
+    isOpen.value = false
+    if (!helpCfg.value) isHelpOpen.value = false
+  },
+)
 </script>
 
 <style lang="scss" scoped>
@@ -191,18 +220,33 @@ $primary-color-light: rgba($primary-color, 0.2);
 $shadow-color: #e1e5ee;
 $break-point: 768px;
 
-@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@300&family=Poppins:wght@300&family=Bellota:wght@300;400;700&display=swap");
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300&family=Poppins:wght@300&family=Bellota:wght@300;400;700&display=swap');
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-.container { max-width: 1200px; padding: 0; margin: 0 auto; }
-ul, li { list-style: none; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+.container {
+  max-width: 1200px;
+  padding: 0;
+  margin: 0 auto;
+}
+ul,
+li {
+  list-style: none;
+}
 
 nav {
   position: fixed;
-  top: 0; left: 0; right: 0;
+  top: 0;
+  left: 0;
+  right: 0;
   width: 100%;
   z-index: 50;
-  font-family: "Poppins", sans-serif;
+  font-family: 'Poppins', sans-serif;
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -219,12 +263,24 @@ nav {
 
     .nav-logo {
       flex: 0 0 auto;
-      display: flex; align-items: center; gap: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
 
-      .logo { display: inline-flex; align-items: center; text-decoration: none; cursor: pointer; }
+      .logo {
+        display: inline-flex;
+        align-items: center;
+        text-decoration: none;
+        cursor: pointer;
+      }
       .logo-img {
-        height: 36px; width: auto; opacity: .95;
-        transition: transform .2s ease, filter .2s ease, opacity .2s ease;
+        height: 36px;
+        width: auto;
+        opacity: 0.95;
+        transition:
+          transform 0.2s ease,
+          filter 0.2s ease,
+          opacity 0.2s ease;
       }
       .logo:hover .logo-img,
       .logo:focus .logo-img {
@@ -234,7 +290,7 @@ nav {
       }
 
       .brand-wordmark {
-        font-family: "Bellota", cursive;
+        font-family: 'Bellota', cursive;
         font-weight: 700;
         font-size: 1.35rem;
         line-height: 1;
@@ -247,13 +303,25 @@ nav {
         user-select: none;
       }
 
-      .nav-toggle { display: none; margin-left: .25rem; }
+      .nav-toggle {
+        display: none;
+        margin-left: 0.25rem;
+      }
     }
 
     .nav-center {
       flex: 1 1 auto;
-      display: flex; justify-content: center; align-items: center; min-width: 0;
-      .nav-menu { display: flex; align-items: center; gap: 1.5rem; margin: 0; padding: 0; }
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-width: 0;
+      .nav-menu {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+        margin: 0;
+        padding: 0;
+      }
     }
 
     .nav-link {
@@ -264,82 +332,175 @@ nav {
       white-space: nowrap;
       color: white;
 
-      i { color: white; transition: transform 0.3s; }
+      i {
+        color: white;
+        transition: transform 0.3s;
+      }
 
       &:after {
-        position: absolute; content: "";
-        width: 0%; height: 0.3em;
-        background: $primary-color; border-radius: 4px;
-        bottom: 1em; left: 1.2em; transition: width 0.3s;
+        position: absolute;
+        content: '';
+        width: 0%;
+        height: 0.3em;
+        background: $primary-color;
+        border-radius: 4px;
+        bottom: 1em;
+        left: 1.2em;
+        transition: width 0.3s;
       }
-      &:hover::after { width: 60%; }
-      &:hover { ul { opacity: 1; visibility: visible; } i { transform: rotate(180deg); } }
+      &:hover::after {
+        width: 60%;
+      }
+      &:hover {
+        ul {
+          opacity: 1;
+          visibility: visible;
+        }
+        i {
+          transform: rotate(180deg);
+        }
+      }
 
       .nav-drop {
-        position: absolute; top: 4rem;
+        position: absolute;
+        top: 4rem;
         background: rgba(0, 0, 0, 0.7);
         color: white;
         border-radius: 4px;
         border: 1px solid rgba(255, 255, 255, 0.2);
-        width: 12rem; padding: 0.5rem; margin-left: -1rem;
-        display: flex; flex-direction: column; gap: 0.5rem;
-        opacity: 0; visibility: hidden; transition: 300ms ease-out;
+        width: 12rem;
+        padding: 0.5rem;
+        margin-left: -1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        opacity: 0;
+        visibility: hidden;
+        transition: 300ms ease-out;
 
         li {
-          padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; transition: background 0.1s;
-          &:hover, &:focus { background: $primary-color-light; }
+          padding: 0.5rem 1rem;
+          border-radius: 4px;
+          cursor: pointer;
+          transition: background 0.1s;
+          &:hover,
+          &:focus {
+            background: $primary-color-light;
+          }
         }
       }
     }
   }
 
   .btn {
-    border: none; outline: transparent;
-    padding: 0.6rem 1.1rem; border-radius: 0.6rem;
-    background: lighten($primary-color, 25%); color: darken($primary-color, 25%);
-    font-family: inherit; font-size: 0.95rem; font-weight: 700; cursor: pointer; transition: 0.1s;
+    border: none;
+    outline: transparent;
+    padding: 0.6rem 1.1rem;
+    border-radius: 0.6rem;
+    background: lighten($primary-color, 25%);
+    color: darken($primary-color, 25%);
+    font-family: inherit;
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: 0.1s;
 
-    &.outline { background: inherit; border: 2px solid lighten($primary-color, 25%); }
-    &:hover { background: lighten($primary-color, 15%); }
-    &:focus { text-shadow: 0 0 18px $primary-color; outline: 4px solid lighten($primary-color, 20%); }
-    &:active { transform: scale(0.98); }
+    &.outline {
+      background: inherit;
+      border: 2px solid lighten($primary-color, 25%);
+    }
+    &:hover {
+      background: lighten($primary-color, 15%);
+    }
+    &:focus {
+      text-shadow: 0 0 18px $primary-color;
+      outline: 4px solid lighten($primary-color, 20%);
+    }
+    &:active {
+      transform: scale(0.98);
+    }
   }
 }
 
 @media screen and (min-width: $break-point) {
   nav .nav-list {
-    .nav-center { display: flex !important; }
-    .nav-logo .nav-toggle { display: none !important; }
+    .nav-center {
+      display: flex !important;
+    }
+    .nav-logo .nav-toggle {
+      display: none !important;
+    }
   }
 }
 
 @media screen and (max-width: $break-point) {
-  nav { padding: 0.6rem 0; }
+  nav {
+    padding: 0.6rem 0;
+  }
 
   nav .nav-list {
     gap: 0.5rem;
 
     .nav-logo {
-      width: 100%; justify-content: space-between;
-      .logo-img { height: 28px; }
-      .brand-wordmark { display: none; }
-      .nav-toggle { display: inline-flex; }
+      width: 100%;
+      justify-content: space-between;
+      .logo-img {
+        height: 28px;
+      }
+      .brand-wordmark {
+        display: none;
+      }
+      .nav-toggle {
+        display: inline-flex;
+      }
     }
 
-    .nav-center { display: none; width: 100%; }
-    &.is-open { .nav-center { display: block !important; } }
+    .nav-center {
+      display: none;
+      width: 100%;
+    }
+    &.is-open {
+      .nav-center {
+        display: block !important;
+      }
+    }
 
-    .nav-center { margin-top: 0.5rem; display: block; }
-    .nav-menu  { display: block; }
+    .nav-center {
+      margin-top: 0.5rem;
+      display: block;
+    }
+    .nav-menu {
+      display: block;
+    }
 
     .nav-link {
-      padding: 1rem 0.5rem; display: block;
-      i { right: 0.5rem; top: 1.2rem; }
+      padding: 1rem 0.5rem;
+      display: block;
+      i {
+        right: 0.5rem;
+        top: 1.2rem;
+      }
 
-      .nav-drop { position: relative; top: 0.4rem; width: 100%; margin-left: 0; opacity: 0; visibility: hidden; }
-      &:after { top: 2.6em; left: 0.08em; }
-      &:hover::after { width: 4em; }
-      &:hover .nav-drop { position: relative; opacity: 1; visibility: visible; }
+      .nav-drop {
+        position: relative;
+        top: 0.4rem;
+        width: 100%;
+        margin-left: 0;
+        opacity: 0;
+        visibility: hidden;
+      }
+      &:after {
+        top: 2.6em;
+        left: 0.08em;
+      }
+      &:hover::after {
+        width: 4em;
+      }
+      &:hover .nav-drop {
+        position: relative;
+        opacity: 1;
+        visibility: visible;
+      }
     }
   }
 }
