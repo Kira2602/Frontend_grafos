@@ -22,10 +22,12 @@
     "cytoscape-edgehandles": "^4.0.1",
     "gsap": "^3.13.0",
     "html2canvas": "^1.4.1",
+    "intro.js": "^8.3.2",
     "jspdf": "^3.0.3",
     "jszip": "^3.10.1",
     "sweetalert2": "^11.23.0",
     "vue": "^3.5.18",
+    "vue-final-modal": "^4.5.5",
     "vue-router": "^4.5.1"
   },
   "devDependencies": {
