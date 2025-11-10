@@ -50,6 +50,24 @@
                   >
                     Asignacion
                   </li>
+                  <li
+                    role="menuitem"
+                    tabindex="0"
+                    @click="goSorts"
+                    @keydown.enter="goSorts"
+                    aria-label="Ir a Sorts"
+                  >
+                    Sorts
+                  </li>
+                  <li
+                    role="menuitem"
+                    tabindex="0"
+                    @click="goArbolBinario"
+                    @keydown.enter="goArbolBinario"
+                    aria-label="Ir a Árboles Bianrios"
+                  >
+                    Árboles Binarios
+                  </li>
                 </ul>
               </li>
 
@@ -76,17 +94,6 @@
                 @keydown.enter="openHelp"
               >
                 Ayuda
-              </li>
-
-              <li
-                class="nav-link"
-                role="link"
-                tabindex="0"
-                @click="goSorts"
-                @keydown.enter="goSorts"
-                aria-label="Ir a Algoritmo de Ordenamiento"
-              >
-                Sorts
               </li>
             </ul>
           </li>
@@ -143,6 +150,11 @@ const goAsignacion = () => {
 const goSorts = () => {
   isOpen.value = false
   router.push('/sorts')
+}
+
+const goArbolBinario = () => {
+  isOpen.value = false
+  router.push('/arbol-binario')
 }
 
 const openHelp = () => {

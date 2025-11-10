@@ -72,6 +72,7 @@
           <button @click="addNode">Insertar</button>
           <button @click="exportTree">Exportar JSON</button>
           <button @click="importTree">Importar JSON</button>
+          <button @click="showGeneratePopup = true">Generar Aleatorio</button>
           <input ref="fileInput" type="file" accept=".json" @change="handleFileImport" hidden />
         </div>
 
@@ -79,6 +80,15 @@
           <span>Número de Nodos: {{ numNodes }}</span>
           <span>Altura del Árbol: {{ height }}</span>
         </div>
+
+        <!-- 🔹 Resumen de datos generados aleatoriamente-->
+          <div v-if="randomPreview.length" class="random-preview">
+            <h3>🌱 Resumen de generación aleatoria</h3>
+
+            <div class="chips">
+              <span v-for="v in randomPreview" :key="v" class="chip">{{ v }}</span>
+            </div>
+          </div>
 
         <div class="traversals">
           <h3>Recorridos</h3>
@@ -126,6 +136,10 @@
         </div>
         </div>
       </div>
+      <GenerarArbolPopup
+        v-model="showGeneratePopup"
+        @confirm="generarAleatorio"
+      />
   </div>
 </template>
 
@@ -135,13 +149,17 @@ import { ref, onMounted, nextTick, computed } from "vue";
 import gsap from "gsap";
 import { BinaryTree } from "@/algorithms/BinaryTree";
 import EstiloPizarra from "@/components/EstiloPizarra.vue";
+import GenerarArbolPopup from "@/components/GenerarArbolPopup.vue";
 
+const showGeneratePopup = ref(false);
 const tree = ref(new BinaryTree());
 const inputValue = ref("");
 const traversalResult = ref([]);
 const numNodes = ref(0);
 const height = ref(0);
 const mode = ref("build");
+const randomPreview = ref([]);
+const selectedTraversal = ref("inOrder");
 
 const rebuildMode = ref("in-pre");
 const inOrderInput = ref("");
@@ -175,6 +193,16 @@ const applyTheme = ({ theme: t, color: c, image: img }) => {
 const switchMode = (m) => {
   mode.value = m;
   resetTree();
+};
+
+function generarAleatorio(valores) {
+  randomPreview.value = valores;
+  resetTree();
+
+  // Crear el árbol con los valores generados
+  valores.forEach((v) => tree.value.insert(v));
+  updateStats();
+  renderTree("build", tree.value);
 };
 
 // ==========================
@@ -332,6 +360,13 @@ const updateStats = () => {
 // Recorridos
 // ==========================
 const runTraversal = (type) => {
+  // Si no hay árbol visible pero existen números generados
+  if (!tree.value.root && randomPreview.value.length > 0) {
+    randomPreview.value.forEach((v) => tree.value.insert(v));
+    updateStats();
+    renderTree("build", tree.value);
+  }
+
   traversalResult.value = tree.value[type]();
   animateTraversal(traversalResult.value);
 };
@@ -725,6 +760,85 @@ h1 {
   .control-section {
     width: 100%;
     max-width: 100%;
+  }
+}
+.random-preview {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  padding: 14px;
+  margin-top: 16px;
+  text-align: center;
+
+  h3 {
+    font-size: 16px;
+    margin-bottom: 8px;
+    color: #bcd4e6;
+  }
+
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 8px;
+    margin-bottom: 10px;
+
+    .chip {
+      background: #567c8d;
+      color: #fff;
+      padding: 5px 10px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+  }
+
+  .recorrido-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 6px;
+
+    button {
+      background: rgba(255, 255, 255, 0.08);
+      color: #ecebe6;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 6px 10px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: background 0.2s ease;
+
+      &.active {
+        background: #567c8d;
+        color: #fff;
+      }
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.15);
+      }
+    }
+  }
+
+  .generate-action {
+    margin-top: 12px;
+
+    button {
+      background: #5c8e9e;
+      color: #fff;
+      padding: 8px 16px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: filter 0.2s;
+
+      &:hover {
+        filter: brightness(1.1);
+      }
+    }
   }
 }
 </style>
