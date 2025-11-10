@@ -2,9 +2,19 @@
   <div class="reconstruct-container">
     <h2>Reconstruir Árbol Binario</h2>
 
-    <div class="mode">
-      <label><input type="radio" value="in-pre" v-model="mode" /> In-Order + Pre-Order</label>
-      <label><input type="radio" value="in-post" v-model="mode" /> In-Order + Post-Order</label>
+    <div class="mode-buttons">
+      <button
+        :class="{ active: mode === 'in-pre' }"
+        @click="mode = 'in-pre'"
+      >
+        In-Order + Pre-Order
+      </button>
+      <button
+        :class="{ active: mode === 'in-post' }"
+        @click="mode = 'in-post'"
+      >
+        In-Order + Post-Order
+      </button>
     </div>
 
     <div class="inputs">
@@ -73,10 +83,19 @@ const renderTreeAnimated = () => {
       ],
     });
   }
-
   cy.elements().remove();
-  cy.add([...nodes, ...edges]);
-  cy.layout({ name: "breadthfirst", directed: true, padding: 20 }).run();
+cy.add([...nodes, ...edges]);
+
+// ⚙️ Asegurar que Cytoscape use las posiciones originales de toGraph()
+// (sin reordenar ni aplicar layout automático)
+cy.layout({
+  name: "preset", // usa las coordenadas manuales
+  animate: false
+}).run();
+
+// 🔄 Ajuste para centrar el árbol en pantalla
+cy.fit(cy.nodes(), 80);
+
 
   const allNodes = cy.nodes();
   const allEdges = cy.edges();
@@ -187,31 +206,44 @@ onMounted(() => {
   border-radius: 20px;
   box-shadow: 0 4px 12px rgba(255, 188, 150, 0.3);
 }
-.mode {
-  margin-bottom: 15px;
+.mode-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 20px;
 }
-.inputs {
-  margin-bottom: 10px;
-}
-.inputs input {
-  margin: 5px;
-  padding: 6px;
-  border-radius: 8px;
-  border: 1px solid #ddd;
-  width: 240px;
-}
-button {
-  background-color: #ffb680;
+
+.mode-buttons button {
+  background: #ffb680;
   border: none;
-  padding: 8px 14px;
-  border-radius: 6px;
+  color: #333;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-weight: 600;
   cursor: pointer;
-  font-weight: bold;
-  margin: 5px;
+  transition: all 0.2s ease;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
 }
-button:hover {
-  background-color: #ff9a55;
+
+.mode-buttons button:hover {
+  background: #ff9a55;
+  transform: translateY(-1px);
 }
+
+.mode-buttons .active {
+  background: #ff9a55;
+  color: #fff;
+  box-shadow: 0 0 10px rgba(255, 154, 85, 0.6);
+}
+
+.inputs {
+  margin-top: 20px; /* 🔹 separa de los botones de modo */
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
 .cy {
   height: 400px;
   width: 100%;

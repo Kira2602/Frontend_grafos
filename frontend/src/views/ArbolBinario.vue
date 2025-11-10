@@ -1,20 +1,27 @@
 <template>
   <div class="arboles-container">
     <!-- Panel lateral izquierdo: Grafo -->
+    <!-- Panel lateral izquierdo: Grafo -->
     <div class="graph-section">
       <div class="graph-header">
-        <h2>Visualización del Árbol</h2>
+        <h2>Visualización del Árbol 🌲</h2>
         <button class="style-btn" @click="showPicker = true" title="Cambiar estilo">
           <i class="fa-solid fa-palette"></i>
         </button>
       </div>
 
+      <!-- Área de dibujo -->
       <div
         ref="cyContainer"
         class="cy"
         :class="[`theme-${theme}`, { 'no-grid': !showGrid }]"
         :style="boardStyle"
       ></div>
+
+      <!-- 🔹 Botón flotante de Reset visible en ambos modos -->
+      <button class="reset-float-btn" @click="resetTree" title="Reiniciar Árbol">
+        <i class="fa-solid fa-rotate-right"></i>
+      </button>
 
       <!-- Popup de estilos -->
       <EstiloPizarra
@@ -26,14 +33,34 @@
       />
     </div>
 
+
     <!-- Panel derecho: Controles -->
     <div class="control-section">
       <h1>Árbol Binario de Búsqueda</h1>
 
       <!-- Pestañas -->
       <div class="tab-buttons">
-        <button :class="{ active: mode === 'build' }" @click="switchMode('build')">Construir Árbol</button>
-        <button :class="{ active: mode === 'rebuild' }" @click="switchMode('rebuild')">Reconstruir Árbol</button>
+        <button :class="{ active: mode === 'build' }" @click="switchMode('build')">
+          <div class="lottie-container">
+            <iframe
+              src="https://lottie.host/embed/dc81bef4-269f-4413-9293-68181bc58553/4k1Hf7JxFN.lottie"
+              frameborder="0"
+              class="lottie-icon"
+            ></iframe>
+          </div>
+          <span>Construir Árbol</span>
+        </button>
+
+        <button :class="{ active: mode === 'rebuild' }" @click="switchMode('rebuild')">
+          <div class="lottie-container">
+            <iframe
+              src="https://lottie.host/embed/fb931282-f9a5-4feb-94b7-403bb1384049/Hhv63n0gUW.lottie"
+              frameborder="0"
+              class="lottie-icon"
+            ></iframe>
+          </div>
+          <span>Reconstruir Árbol</span>
+        </button>
       </div>
 
       <!-- ===================== -->
@@ -43,7 +70,6 @@
         <div class="controls">
           <input v-model.number="inputValue" type="number" placeholder="Ingrese un número" @keyup.enter="addNode" />
           <button @click="addNode">Insertar</button>
-          <button @click="resetTree">Reset</button>
           <button @click="exportTree">Exportar JSON</button>
           <button @click="importTree">Importar JSON</button>
           <input ref="fileInput" type="file" accept=".json" @change="handleFileImport" hidden />
@@ -71,9 +97,20 @@
       <div v-else class="rebuild-section">
         <h3>Reconstruir Árbol</h3>
 
-        <div class="mode-selector">
-          <label><input type="radio" value="in-pre" v-model="rebuildMode" /> In-Order + Pre-Order</label>
-          <label><input type="radio" value="in-post" v-model="rebuildMode" /> In-Order + Post-Order</label>
+        <!-- 🔹 Nueva selección de modo -->
+        <div class="rebuild-modes">
+          <button
+            :class="{ active: rebuildMode === 'in-pre' }"
+            @click="rebuildMode = 'in-pre'"
+          >
+            In-Order + Pre-Order
+          </button>
+          <button
+            :class="{ active: rebuildMode === 'in-post' }"
+            @click="rebuildMode = 'in-post'"
+          >
+            In-Order + Post-Order
+          </button>
         </div>
 
         <div class="inputs">
@@ -84,12 +121,11 @@
           />
         </div>
 
-        <div class="buttons">
+        <div class="buttons rebuild-actions">
           <button @click="rebuildTree">Reconstruir</button>
-          <button @click="resetTree">Reset</button>
+        </div>
         </div>
       </div>
-    </div>
   </div>
 </template>
 
@@ -158,7 +194,7 @@ const renderTree = async (target, dataTree) => {
             label: "data(label)",
             "background-color": "data(color)",
             "text-valign": "center",
-            color: "#0f1120", // texto negro
+            color: "#0f1120",
             "font-size": "14px",
             width: 36,
             height: 36,
@@ -202,24 +238,71 @@ const renderTree = async (target, dataTree) => {
   cy.add([...nodes, ...edges]);
 
   // Layout vertical
-  cy.layout({
-    name: "breadthfirst",
-    directed: true,
-    padding: 20,
-    spacingFactor: 1.15,
-    fit: false,
-    orientation: "vertical",
-  }).run();
+ // ✅ Usar layout "preset" para mantener las posiciones definidas en toGraph()
+    cy.layout({
+      name: "preset",     // ← no genera su propio layout
+      animate: false,
+    }).run();
 
-  // Animación
-  gsap.from(cy.nodes().map((n) => n.popperRef()), {
-    scale: 0.6,
-    opacity: 0,
-    duration: 0.5,
-    stagger: 0.05,
-  });
+    // 🔄 Centrar árbol en pantalla
+    cy.fit(cy.nodes(), 80);
 
-  if (cy.nodes().length > 10) cy.fit();
+  //cy.center();
+  // ==========================
+  // 🎬 Animación condicional (solo en reconstruir)
+  // ==========================
+  if (target === "rebuild") {
+    const nodes = cy.nodes();
+    const edges = cy.edges();
+
+    // Ocultar todo inicialmente
+    nodes.forEach((n) => n.style("opacity", 0));
+    edges.forEach((e) => e.style("opacity", 0));
+
+    const tl = gsap.timeline({ defaults: { duration: 0.35, ease: "back.out(1.7)" } });
+
+    // 🔹 Aparición progresiva de nodos con un "destello" (color temporal)
+    nodes.forEach((node, i) => {
+      const originalColor = node.data("color");
+      tl.to({}, {
+      duration: 0.3,
+      onStart: () => {
+        node.style("background-color", "#ffcc80");
+        node.style("width", "42px");
+        node.style("height", "42px");
+      },
+      onComplete: () => {
+        node.style("background-color", originalColor);
+        node.style("width", "36px");
+        node.style("height", "36px");
+        node.style("opacity", 1);
+      },
+    }, i * 0.18);
+
+    });
+
+    // 🔸 Luego aparecen las aristas
+    tl.to({}, { duration: 0.2 }); // pequeño delay
+    edges.forEach((edge, i) => {
+      tl.to({}, {
+        duration: 0.2,
+        onStart: () => edge.style("opacity", 1),
+      }, "<+=0.08");
+    });
+
+  } else {
+    // 🔹 Animación simple (modo construir)
+    gsap.from(cy.nodes().map((n) => n.popperRef()), {
+      scale: 0.6,
+      opacity: 0,
+      duration: 0.5,
+      stagger: 0.05,
+    });
+  }
+
+    // 🔄 Centrar el árbol en pantalla
+    cy.fit(cy.nodes(), 80);
+
 };
 
 // ==========================
@@ -304,12 +387,25 @@ const rebuildTree = () => {
     return;
   }
 
-  if (rebuildMode.value === "in-pre") tree.value = BinaryTree.buildFromInPre(inArr, secArr);
-  else tree.value = BinaryTree.buildFromInPost(inArr, secArr);
+  let newTree = null;
 
+  if (rebuildMode.value === "in-pre") {
+    newTree = BinaryTree.buildFromInPre(inArr, secArr);
+  } else {
+    newTree = BinaryTree.buildFromInPost(inArr, secArr);
+  }
+
+  if (!newTree || !newTree.root) {
+    alert("Los recorridos no coinciden o no forman un árbol válido.");
+    return;
+  }
+
+  tree.value = newTree;
   updateStats();
+  console.log("Árbol reconstruido:", JSON.stringify(tree.value.root, null, 2));
   renderTree("rebuild", tree.value);
 };
+
 
 onMounted(() => renderTree("build", tree.value));
 </script>
@@ -325,20 +421,19 @@ $shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
 
 .arboles-container {
   min-height: calc(100vh - $navbar-height);
-  padding-top: calc($navbar-height + 16px);
   display: flex;
-  justify-content: center;
-  align-items: flex-start;
+  justify-content: space-between;
+  align-items: stretch;
   background: $page-bg;
   color: $text-color;
   font-family: "Poppins", sans-serif;
-  padding-bottom: 48px;
-  gap: 28px;
+  padding: calc($navbar-height + 16px) 24px 48px;
+  gap: 20px;
 }
 
 /* ===== Panel izquierdo (grafo) ===== */
 .graph-section {
-  flex: 0 0 480px;
+  flex: 1;
   background: $panel-bg;
   border: 1px solid $panel-border;
   border-radius: 16px;
@@ -347,8 +442,40 @@ $shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
   display: flex;
   flex-direction: column;
   align-items: center;
+  position: relative;
 }
+.reset-float-btn {
+  position: absolute;
+  bottom: 45px; 
+  right: 28px;  
+  background: $accent;
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 44px; 
+  height: 44px; 
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 18px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  transition: all 0.25s ease;
+  z-index: 10;
 
+  &:hover {
+    background: lighten($accent, 8%);
+    transform: scale(1.08);
+  }
+
+  &:active {
+    transform: scale(0.94);
+  }
+
+  i {
+    pointer-events: none;
+  }
+}
 .graph-header {
   width: 100%;
   display: flex;
@@ -381,21 +508,22 @@ $shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
 /* Fondo tipo Graphroom */
 .cy {
   width: 100%;
-  height: 440px;
+  height: 75vh; 
   border-radius: 12px;
-  background-color: var(--board-bg, #1c212b);
-  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.08) 1.1px, transparent 1.1px);
+  background-color: #ffffff; 
+  background-image: radial-gradient(circle, rgba(0, 0, 0, 0.08) 1.2px, transparent 1.2px);
   background-size: 14px 14px;
-  box-shadow: inset 0 0 8px rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.05);
 
   &.theme-grid {
-    background-image: linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    background-image: 
+      linear-gradient(to right, rgba(0, 0, 0, 0.08) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(0, 0, 0, 0.08) 1px, transparent 1px);
     background-size: 20px 20px;
   }
 
   &.theme-dotted {
-    background-image: radial-gradient(circle, rgba(255, 255, 255, 0.1) 1.1px, transparent 1.1px);
+    background-image: radial-gradient(circle, rgba(0, 0, 0, 0.08) 1.2px, transparent 1.2px);
     background-size: 14px 14px;
   }
 
@@ -418,6 +546,9 @@ $shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
   border-radius: 16px;
   box-shadow: $shadow;
   padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
 }
 h1 {
   text-align: center;
@@ -427,29 +558,67 @@ h1 {
 }
 
 .tab-buttons {
-  text-align: center;
-  margin-bottom: 18px;
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
 }
+
 .tab-buttons button {
-  padding: 8px 15px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  width: 180px;
+  height: 180px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid $panel-border;
   color: $text-color;
   font-weight: 600;
-  border-radius: 10px;
-  margin: 3px;
+  border-radius: 14px;
+  padding: 10px;
   cursor: pointer;
-  transition: background 0.2s, transform 0.05s;
+  transition: background 0.2s, transform 0.05s, box-shadow 0.2s;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+
   &:hover {
     background: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
   }
+
   &:active {
     transform: translateY(1px);
   }
+
+  span {
+    margin-top: 8px;
+    font-size: 14px;
+  }
+
+.lottie-container {
+  width: 120px;
+  height: 120px; 
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 6px; 
+
+  .lottie-icon {
+    width: 120%;
+    height: 120%;
+    border: none;
+    border-radius: 12px;
+    transform: scale(1.1);
+    pointer-events: none;
+  }
 }
+}
+
 .tab-buttons .active {
   background: $accent;
   color: #ecebe6;
+  box-shadow: 0 0 10px rgba(86, 124, 141, 0.8);
 }
 
 .controls input,
@@ -505,20 +674,57 @@ h1 {
   font-size: 14px;
   color: rgba(255, 255, 255, 0.8);
 }
+.rebuild-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
 
+.rebuild-modes {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  margin: 10px 0 18px 0;
+}
+
+.rebuild-modes button {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: $text-color;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.15);
+  }
+
+  &.active {
+    background: $accent;
+    color: #fff;
+    box-shadow: 0 0 10px rgba(86, 124, 141, 0.8);
+  }
+}
+
+.rebuild-actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
 @media (max-width: 960px) {
   .arboles-container {
     flex-direction: column;
     align-items: center;
-    padding: calc($navbar-height + 10px) 12px 40px;
   }
-  .graph-section {
-    width: 100%;
-    max-width: 600px;
-  }
+  .graph-section,
   .control-section {
     width: 100%;
-    margin-top: 20px;
+    max-width: 100%;
   }
 }
 </style>
