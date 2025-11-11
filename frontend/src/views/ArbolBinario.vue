@@ -70,7 +70,7 @@
         <div class="controls">
           <input v-model.number="inputValue" type="number" placeholder="Ingrese un número" @keyup.enter="addNode" />
           <button @click="addNode">Insertar</button>
-          <button @click="exportTree">Exportar JSON</button>
+          <button @click="showExportPopup = true">Exportar JSON</button>
           <button @click="importTree">Importar JSON</button>
           <button @click="showGeneratePopup = true">Generar Aleatorio</button>
           <input ref="fileInput" type="file" accept=".json" @change="handleFileImport" hidden />
@@ -140,6 +140,19 @@
         v-model="showGeneratePopup"
         @confirm="generarAleatorio"
       />
+        <!-- Popup para exportar con nombre -->
+      <div v-if="showExportPopup" class="popup-mask" @click.self="showExportPopup = false">
+        <div class="popup-card">
+          <h3>💾 Exportar Árbol a JSON</h3>
+          <label>Nombre del archivo:</label>
+          <input v-model="exportFileName" placeholder="Ej: mi_arbol" />
+
+          <div class="popup-actions">
+            <button class="btn btn-sec" @click="showExportPopup = false">Cancelar</button>
+            <button class="btn btn-main" @click="exportTreeWithName">Guardar</button>
+          </div>
+        </div>
+      </div>
   </div>
 </template>
 
@@ -152,6 +165,8 @@ import EstiloPizarra from "@/components/EstiloPizarra.vue";
 import GenerarArbolPopup from "@/components/GenerarArbolPopup.vue";
 
 const showGeneratePopup = ref(false);
+const showExportPopup = ref(false);
+const exportFileName = ref("arbol_binario");
 const tree = ref(new BinaryTree());
 const inputValue = ref("");
 const traversalResult = ref([]);
@@ -388,13 +403,15 @@ const animateTraversal = (order) => {
 // ==========================
 // Exportar / importar JSON
 // ==========================
-const exportTree = () => {
+function exportTreeWithName() {
+  const fileName = exportFileName.value.trim() || "arbol";
   const blob = new Blob([tree.value.toJSON()], { type: "application/json" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
-  link.download = "arbol.json";
+  link.download = `${fileName}.json`;
   link.click();
-};
+  showExportPopup.value = false;
+}
 
 const importTree = () => fileInput.value.click();
 
@@ -418,7 +435,7 @@ const rebuildTree = () => {
   const secArr = secondOrderInput.value.split(",").map((n) => parseInt(n.trim())).filter((n) => !isNaN(n));
 
   if (!inArr.length || !secArr.length) {
-    alert("Por favor, ingrese recorridos válidos.");
+    Swal.fire("Error", "Por favor, ingrese recorridos válidos.", "error");
     return;
   }
 
@@ -431,7 +448,7 @@ const rebuildTree = () => {
   }
 
   if (!newTree || !newTree.root) {
-    alert("Los recorridos no coinciden o no forman un árbol válido.");
+    Swal.fire("Error", "Los recorridos no coinciden o no forman un árbol válido.", "error");
     return;
   }
 
@@ -841,4 +858,67 @@ h1 {
     }
   }
 }
+  .popup-mask {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: grid;
+    place-items: center;
+    z-index: 2000;
+  }
+
+  .popup-card {
+    background: #2c2f3a;
+    border-radius: 12px;
+    color: #e7e7ec;
+    padding: 20px;
+    width: min(420px, 90vw);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .popup-card h3 {
+    margin-top: 0;
+    margin-bottom: 10px;
+  }
+
+  .popup-card input {
+    width: 95%;
+    padding: 8px;
+    margin-top: 6px;
+    margin-bottom: 16px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.08);
+    color: #e7e7ec;
+  }
+
+  .popup-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  .btn {
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    font-weight: 600;
+    transition: 0.2s;
+  }
+
+  .btn-sec {
+    background: #2f4156;
+    color: #ecebe6;
+  }
+
+  .btn-main {
+    background: #567c8d;
+    color: #fff;
+  }
+
+  .btn:hover {
+    filter: brightness(1.1);
+  }
 </style>

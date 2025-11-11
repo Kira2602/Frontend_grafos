@@ -162,6 +162,9 @@ const openHelp = () => {
   isHelpOpen.value = true
 }
 
+// ======================================
+// CONFIGURACIÓN DE AYUDA SEGÚN LA RUTA
+// ======================================
 const helpCfg = computed(() => {
   const name = route.name?.toString().toLowerCase() || ''
   const path = route.path?.toString().toLowerCase() || ''
@@ -173,7 +176,7 @@ const helpCfg = computed(() => {
       videoId,
       youtubeUrl: `https://youtu.be/${videoId}`,
       embedQuery: '',
-      pdfUrl: '', // opcional para pizarra
+      pdfUrl: '',
     }
   }
 
@@ -189,7 +192,6 @@ const helpCfg = computed(() => {
     }
   }
 
-  // ✅ Ayuda para Asignación: usa tu video con el parámetro `si`
   if (name === 'asignacion' || path === '/asignacion') {
     const videoId = 'gUYPWANOpRw'
     const si = '1r-cH1VDTjwgdFj3'
@@ -198,7 +200,7 @@ const helpCfg = computed(() => {
       videoId,
       youtubeUrl: `https://youtu.be/${videoId}?si=${si}`,
       embedQuery: `si=${si}`,
-      pdfUrl: '/assets/pdf/asignacion_guide.pdf', // opcional, si no existe puedes dejarlo en ''
+      pdfUrl: '/assets/pdf/asignacion_guide.pdf',
     }
   }
 
@@ -210,7 +212,21 @@ const helpCfg = computed(() => {
       videoId,
       youtubeUrl: `https://youtu.be/${videoId}?si=${si}`,
       embedQuery: `si=${si}`,
-      pdfUrl: '/assets/pdf/sorts_guide.pdf', // opcional, si no existe puedes dejarlo en ''
+      pdfUrl: '/assets/pdf/sorts_guide.pdf',
+    }
+  }
+
+  // ✅ NUEVO BLOQUE PARA ÁRBOL BINARIO
+    // ✅ NUEVO BLOQUE PARA ÁRBOL BINARIO
+  if (name === 'arbol-binario' || path === '/arbol-binario') {
+    const videoId = 'XfpBkrlmyk4'
+    const si = 'hDwM5E6qON9DJkcX'
+    return {
+      heading: 'Árbol Binario: Tutorial',
+      videoId,
+      youtubeUrl: `https://youtu.be/${videoId}?si=${si}`,
+      embedQuery: `si=${si}`,
+      pdfUrl: '/assets/pdf/arboles_guide.pdf',
     }
   }
 

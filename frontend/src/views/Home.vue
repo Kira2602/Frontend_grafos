@@ -128,7 +128,7 @@ onMounted(() => {
                   <div class="card-image">
                     <!-- Asegúrate de colocar la imagen en /src/assets/img/alg_sorts.png -->
                     <img
-                      src="../assets/img/alg_sorts.png"
+                      src="../assets/img/alg_sort.png"
                       alt="Algoritmos de Sorts"
                       class="card-img"
                       onerror="this.src='https://via.placeholder.com/220x130?text=Sorts';"
