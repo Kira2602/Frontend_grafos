@@ -5,6 +5,7 @@ import Johnson from '../views/Johnson.vue'
 import Asignacion from '@/views/Asignacion.vue'
 import Sorts from '@/views/Sorts.vue'
 import ArbolBinario from '@/views/ArbolBinario.vue'
+import NorWest from '@/views/NorWest.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -38,6 +39,11 @@ const router = createRouter({
       path: '/arbol-binario',
       name: 'arbol-binario',
       component: ArbolBinario,
+    },
+    {
+      path: '/norwest',
+      name: 'norwest',
+      component: NorWest,
     },
   ],
 })
