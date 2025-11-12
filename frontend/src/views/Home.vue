@@ -119,8 +119,56 @@ onMounted(() => {
                   </p>
                   <button class="button" @click="goToAsignacion">Iniciar</button>
                 </div>
+              </div> 
+
+              <!-- Card 4 -->
+              <div class="card swiper-slide">
+                <div class="image-content">
+                  <span class="overlay"></span>
+                  <div class="card-image">
+                    <!-- Asegúrate de colocar la imagen en /src/assets/img/alg_sorts.png -->
+                    <img
+                      src="../assets/img/alg_sort.png"
+                      alt="Algoritmos de Sorts"
+                      class="card-img"
+                      onerror="this.src='https://via.placeholder.com/220x130?text=Sorts';"
+                    />
+                  </div>
+                </div>
+                <div class="card-content">
+                  <h2 class="name">Algoritmos de Sorts</h2>
+                  <p class="description">
+                    Permite generar, visualizar y ordenar arreglos numéricos con los algoritmos Merge, Shell, Selection e Insertion Sort mediante animaciones y estadísticas en tiempo real.
+                  </p>
+                  <button class="button" @click="router.push({ name: 'sorts' })">Iniciar</button>
+                </div>
               </div>
-            </div>
+
+              <!-- Card 4 -->
+              <div class="card swiper-slide">
+                <div class="image-content">
+                  <span class="overlay"></span>
+                  <div class="card-image">
+                    <!-- Asegúrate de colocar la imagen en /src/assets/img/alg_sorts.png -->
+                    <img
+                      src="../assets/img/alg_arbol_binario.png"
+                      alt="Árboles Binarios"
+                      class="card-img"
+                      onerror="this.src='https://via.placeholder.com/220x130?text=Sorts';"
+                    />
+                  </div>
+                </div>
+                <div class="card-content">
+                  <h2 class="name">Árboles Binarios</h2>
+                  <p class="description">
+                    Permite construir y visualizar árboles binarios de búsqueda, realizar recorridos in-order, pre-order y post-order, además de exportar o reconstruir árboles desde archivos JSON.
+                  </p>
+                  <button class="button" @click="router.push({ name: 'arbol-binario' })">Iniciar</button>
+                </div>
+              </div>
+
+
+              </div>
           </div>
 
           <!-- Controles del carrusel -->

@@ -4,6 +4,7 @@ import Pizarra_grafos from '../views/Pizarra_grafos.vue'
 import Johnson from '../views/Johnson.vue'
 import Asignacion from '@/views/Asignacion.vue'
 import Sorts from '@/views/Sorts.vue'
+import ArbolBinario from '@/views/ArbolBinario.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -32,7 +33,12 @@ const router = createRouter({
       path: '/sorts',
       name: 'sorts',
       component: Sorts,
-    }
+    },
+    {
+      path: '/arbol-binario',
+      name: 'arbol-binario',
+      component: ArbolBinario,
+    },
   ],
 })
 
