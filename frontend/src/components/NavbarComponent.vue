@@ -53,6 +53,15 @@
                   <li
                     role="menuitem"
                     tabindex="0"
+                    @click="goNorWest"
+                    @keydown.enter="goNorWest"
+                    aria-label="Ir a North West Corner"
+                  >
+                    North West
+                  </li>
+                  <li
+                    role="menuitem"
+                    tabindex="0"
                     @click="goSorts"
                     @keydown.enter="goSorts"
                     aria-label="Ir a Sorts"
@@ -147,6 +156,11 @@ const goAsignacion = () => {
   router.push('/asignacion')
 }
 
+const goNorWest = () => {
+  isOpen.value = false
+  router.push('/norwest')
+}
+
 const goSorts = () => {
   isOpen.value = false
   router.push('/sorts')
@@ -201,6 +215,18 @@ const helpCfg = computed(() => {
       youtubeUrl: `https://youtu.be/${videoId}?si=${si}`,
       embedQuery: `si=${si}`,
       pdfUrl: '/assets/pdf/asignacion_guide.pdf',
+    }
+  }
+
+  if (name === 'norwest' || path === '/norwest') {
+    const videoId = 'EXAMPLE_VIDEO_ID'
+    const si = 'EXAMPLE_SI'
+    return {
+      heading: 'North West: Tutorial',
+      videoId,
+      youtubeUrl: `https://youtu.be/${videoId}?si=${si}`,
+      embedQuery: `si=${si}`,
+      pdfUrl: '/assets/pdf/norwest_guide.pdf',
     }
   }
 

@@ -160,15 +160,23 @@
           </div>
         </div>
 
-        <div class="stat-item">
+        <div class="stat-item" v-if="!isAlgorithmRunning">
           <h3>Registro de Pasos:</h3>
           <div class="steps-display" id="stepsDisplay">
             <div class="steps-log">
               <div v-for="(step, index) in stepLog" :key="index" class="step-entry">
                 <span class="step-time">[{{ step.time }}]</span>
-                <span class="step-text">{{ step.text }}</span>
+                  <span class="step-text">{{ step.text }}</span>
               </div>
             </div>
+          </div>
+        </div>
+        
+        <div class="stat-item" v-else>
+          <h3>Estado:</h3>
+          <div class="running-indicator">
+            <i class="fas fa-spinner fa-spin"></i>
+            <span>Algoritmo en ejecución...</span>
           </div>
         </div>
 
@@ -287,6 +295,7 @@
 import NavbarComponent from '@/components/NavbarComponent.vue'
 import { ref, computed } from 'vue';
 import { gsap } from 'gsap';
+import Swal from 'sweetalert2';
 
 const size = ref();
 const topL = ref();
@@ -449,12 +458,22 @@ const generateArray = () => {
       const bottomVal = parseInt(bottomL.value) || 1;
       
       if (sizeVal <= 0 || sizeVal > 1000) {
-        alert('La cantidad de elementos debe estar entre 1 y 1000');
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: 'La cantidad de elementos debe estar entre 1 y 1000',
+          confirmButtonColor: '#667eea'
+        });
         return;
       }
       
       if (bottomVal >= topVal) {
-        alert('El límite inferior debe ser menor que el límite superior');
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: 'El límite inferior debe ser menor que el límite superior',
+          confirmButtonColor: '#667eea'
+        });
         return;
       }
       
@@ -468,7 +487,12 @@ const generateArray = () => {
     } else {
       // Generación manual
       if (!array.value || array.value.trim() === '') {
-        alert('Por favor ingrese los elementos del arreglo separados por comas');
+        Swal.fire({
+          icon: 'warning',
+          title: 'Atención',
+          text: 'Por favor ingrese los elementos del arreglo separados por comas',
+          confirmButtonColor: '#667eea'
+        });
         return;
       }
       
@@ -481,12 +505,22 @@ const generateArray = () => {
       });
       
       if (elements.length === 0) {
-        alert('Debe ingresar al menos un elemento');
+        Swal.fire({
+          icon: 'warning',
+          title: 'Atención',
+          text: 'Debe ingresar al menos un elemento',
+          confirmButtonColor: '#667eea'
+        });
         return;
       }
       
       if (elements.length > 1000) {
-        alert('Máximo 1000 elementos permitidos');
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: 'Máximo 1000 elementos permitidos',
+          confirmButtonColor: '#667eea'
+        });
         return;
       }
       
@@ -496,7 +530,12 @@ const generateArray = () => {
     isGenerated.value = true;
     console.log('Arreglo generado:', bubbleArray.value);
   } catch (error) {
-    alert(error.message);
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: error.message,
+      confirmButtonColor: '#667eea'
+    });
   }
 };
 
@@ -694,7 +733,12 @@ const toggleStatsPanel = () => {
 // Función para reiniciar la animación
 const restartAnimation = async () => {
   if (initialArray.value.length === 0 || !currentAlgorithm.value) {
-    alert('No hay ningún algoritmo para reiniciar');
+    Swal.fire({
+      icon: 'info',
+      title: 'Información',
+      text: 'No hay ningún algoritmo para reiniciar',
+      confirmButtonColor: '#667eea'
+    });
     return;
   }
 
@@ -727,7 +771,12 @@ const exportArray = (format) => {
   const dataToExport = sortedArray.value.length > 0 ? sortedArray.value : bubbleArray.value;
   
   if (dataToExport.length === 0) {
-    alert('No hay datos para exportar');
+    Swal.fire({
+      icon: 'warning',
+      title: 'Atención',
+      text: 'No hay datos para exportar',
+      confirmButtonColor: '#667eea'
+    });
     return;
   }
 
@@ -779,7 +828,13 @@ const exportArray = (format) => {
   showExportModal.value = false;
   
   // Mostrar notificación
-  alert(`✅ Arreglo exportado como ${fileName}.${extension}`);
+  Swal.fire({
+    icon: 'success',
+    title: '¡Exportado!',
+    text: `Arreglo exportado como ${fileName}.${extension}`,
+    confirmButtonColor: '#667eea',
+    timer: 2000
+  });
 };
 
 // Función para importar archivo
@@ -846,10 +901,21 @@ const handleFileImport = (event) => {
         fileInput.value.value = '';
       }
 
-      alert(`✅ Arreglo importado exitosamente: ${importedArray.length} elementos`);
+      Swal.fire({
+        icon: 'success',
+        title: '¡Importado!',
+        text: `Arreglo importado exitosamente: ${importedArray.length} elementos`,
+        confirmButtonColor: '#667eea',
+        timer: 2000
+      });
       
     } catch (error) {
-      alert(`❌ Error al importar: ${error.message}`);
+      Swal.fire({
+        icon: 'error',
+        title: 'Error al importar',
+        text: error.message,
+        confirmButtonColor: '#667eea'
+      });
       if (fileInput.value) {
         fileInput.value.value = '';
       }
@@ -857,7 +923,12 @@ const handleFileImport = (event) => {
   };
 
   reader.onerror = () => {
-    alert('❌ Error al leer el archivo');
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: 'Error al leer el archivo',
+      confirmButtonColor: '#667eea'
+    });
   };
 
   reader.readAsText(file);
@@ -871,64 +942,70 @@ const selectionSort = async (arr) => {
   const ascending = isAsc.value;
   const isManyElements = n > 50; // Optimización para muchos elementos
   
+  // Acumular pasos en un array temporal
+  const tempSteps = [];
+  
   const addStep = (text) => {
-    stepLog.value.push({
+    tempSteps.push({
       text: text,
       time: (stepCounter * 0.06).toFixed(3)
     });
     stepCounter++;
   };
   
-  addStep(`🚀 Iniciando Selection Sort (${ascending ? 'Ascendente' : 'Descendente'})`);
-  addStep(`📊 Arreglo inicial: [${array.join(', ')}]`);
+  addStep(`Iniciando Selection Sort (${ascending ? 'Ascendente' : 'Descendente'})`);
+  addStep(`Arreglo inicial: [${array.join(', ')}]`);
   
   for (let i = 0; i < n - 1; i++) {
     let targetIdx = i;
     const targetType = ascending ? 'mínimo' : 'máximo';
-    addStep(`\n🔍 Iteración ${i + 1}: Buscando ${targetType} desde posición ${i}`);
-    addStep(`📌 Valor inicial ${targetType}: ${array[targetIdx]} en posición ${targetIdx}`);
+    addStep(`\nIteración ${i + 1}: Buscando ${targetType} desde posición ${i}`);
+    addStep(`Valor inicial ${targetType}: ${array[targetIdx]} en posición ${targetIdx}`);
     
     for (let j = i + 1; j < n; j++) {
       // Reducir logs si hay muchos elementos
       if (!isManyElements || j % 5 === 0) {
-        addStep(`   🔎 Comparando: ${array[j]} (pos ${j}) vs ${array[targetIdx]} (pos ${targetIdx})`);
+        addStep(`   Comparando: ${array[j]} (pos ${j}) vs ${array[targetIdx]} (pos ${targetIdx})`);
       }
       
       const shouldSwap = ascending ? array[j] < array[targetIdx] : array[j] > array[targetIdx];
       
       if (shouldSwap) {
-        addStep(`   ✅ Nuevo ${targetType} encontrado: ${array[j]} en posición ${j}`);
+        addStep(`   Nuevo ${targetType} encontrado: ${array[j]} en posición ${j}`);
         targetIdx = j;
       } else if (!isManyElements) {
         const comparison = ascending ? '>=' : '<=';
-        addStep(`   ❌ ${array[j]} ${comparison} ${array[targetIdx]}, se mantiene el ${targetType}`);
+        addStep(`   ${array[j]} ${comparison} ${array[targetIdx]}, se mantiene el ${targetType}`);
       }
       
       // Reducir delay si hay muchos elementos
-      await new Promise(resolve => setTimeout(resolve, isManyElements ? 10 : 60));
+      await new Promise(resolve => setTimeout(resolve, isManyElements ? 1 : 60));
     }
     
     if (targetIdx !== i) {
-      addStep(`🔄 Intercambio: ${array[i]} (pos ${i}) ↔ ${array[targetIdx]} (pos ${targetIdx})`);
+      addStep(`Intercambio: ${array[i]} (pos ${i}) ↔ ${array[targetIdx]} (pos ${targetIdx})`);
       [array[i], array[targetIdx]] = [array[targetIdx], array[i]];
-      addStep(`✨ Estado: [${array.join(', ')}]`);
+      addStep(`Estado: [${array.join(', ')}]`);
       
       // Solo animar intercambios importantes o cada N pasos si hay muchos elementos
       if (!isManyElements || i % 3 === 0) {
         await animateArrayUpdate(array, true);
-        await new Promise(resolve => setTimeout(resolve, isManyElements ? 5 : 30));
+        await new Promise(resolve => setTimeout(resolve, isManyElements ? 2 : 30));
       } else {
         // Actualizar sin animación
         bubbleArray.value = [...array];
         currentArray.value = [...array];
       }
     } else {
-      addStep(`⏭️ No hay intercambio necesario, elemento ya en posición correcta`);
+      addStep(`No hay intercambio necesario, elemento ya en posición correcta`);
     }
   }
   
-  addStep(`\n🎉 Selection Sort completado`);
-  addStep(`📊 Arreglo final ordenado: [${array.join(', ')}]`);
+  addStep(`\nSelection Sort completado`);
+  addStep(`Arreglo final ordenado: [${array.join(', ')}]`);
+  
+  // Agregar todos los pasos acumulados al final
+  stepLog.value = tempSteps;
   
   return array;
 };
@@ -940,23 +1017,26 @@ const insertionSort = async (arr) => {
   const ascending = isAsc.value;
   const isManyElements = array.length > 50;
   
+  // Acumular pasos en un array temporal
+  const tempSteps = [];
+  
   const addStep = (text) => {
-    stepLog.value.push({
+    tempSteps.push({
       text: text,
       time: (stepCounter * 0.04).toFixed(3)
     });
     stepCounter++;
   };
   
-  addStep(`🚀 Iniciando Insertion Sort (${ascending ? 'Ascendente' : 'Descendente'})`);
-  addStep(`📊 Arreglo inicial: [${array.join(', ')}]`);
+  addStep(`Iniciando Insertion Sort (${ascending ? 'Ascendente' : 'Descendente'})`);
+  addStep(`Arreglo inicial: [${array.join(', ')}]`);
   
   for (let i = 1; i < array.length; i++) {
     let key = array[i];
     let j = i - 1;
     
-    addStep(`\n🔍 Iteración ${i}: Insertando ${key} desde posición ${i}`);
-    addStep(`📌 Elemento a insertar: ${key}`);
+    addStep(`\nIteración ${i}: Insertando ${key} desde posición ${i}`);
+    addStep(`Elemento a insertar: ${key}`);
     
     let moves = 0;
     
@@ -967,43 +1047,46 @@ const insertionSort = async (arr) => {
     while (j >= 0 && shouldMove(array[j], key)) {
       const comparison = ascending ? '>' : '<';
       if (!isManyElements || moves % 3 === 0) {
-        addStep(`   🔎 Comparando: ${array[j]} (pos ${j}) ${comparison} ${key}`);
-        addStep(`   ➡️ Moviendo ${array[j]} de posición ${j} a ${j + 1}`);
+        addStep(`   Comparando: ${array[j]} (pos ${j}) ${comparison} ${key}`);
+        addStep(`   Moviendo ${array[j]} de posición ${j} a ${j + 1}`);
       }
       array[j + 1] = array[j];
       j = j - 1;
       moves++;
       
       // Insertion Sort es O(n²) pero mejor que Selection
-      await new Promise(resolve => setTimeout(resolve, isManyElements ? 8 : 40));
+      await new Promise(resolve => setTimeout(resolve, isManyElements ? 1 : 40));
     }
     
     array[j + 1] = key;
     
     if (moves > 0) {
-      addStep(`✅ Insertando ${key} en posición ${j + 1}`);
-      addStep(`📊 Total de movimientos: ${moves}`);
+      addStep(`Insertando ${key} en posición ${j + 1}`);
+      addStep(`Total de movimientos: ${moves}`);
       if (!isManyElements) {
-        addStep(`✨ Estado: [${array.join(', ')}]`);
+        addStep(`Estado: [${array.join(', ')}]`);
       }
       
       // Animar solo cada N pasos si hay muchos elementos
       if (!isManyElements || i % 5 === 0) {
         await animateArrayUpdate(array, true);
-        await new Promise(resolve => setTimeout(resolve, isManyElements ? 3 : 20));
+        await new Promise(resolve => setTimeout(resolve, isManyElements ? 2 : 20));
       } else {
         bubbleArray.value = [...array];
         currentArray.value = [...array];
       }
     } else {
       if (!isManyElements) {
-        addStep(`⏭️ ${key} ya está en posición correcta`);
+        addStep(`${key} ya está en posición correcta`);
       }
     }
   }
   
-  addStep(`\n🎉 Insertion Sort completado`);
-  addStep(`📊 Arreglo final ordenado: [${array.join(', ')}]`);
+  addStep(`\nInsertion Sort completado`);
+  addStep(`Arreglo final ordenado: [${array.join(', ')}]`);
+  
+  // Agregar todos los pasos acumulados al final
+  stepLog.value = tempSteps;
   
   return array;
 };
@@ -1021,8 +1104,8 @@ const mergeSort = async (arr, isRoot = true, depth = 0) => {
       mergeStepCounter++;
     };
     const ascending = isAsc.value;
-    addStep(`🚀 Iniciando Merge Sort (${ascending ? 'Ascendente' : 'Descendente'})`);
-    addStep(`📊 Arreglo inicial: [${arr.join(', ')}]`);
+    addStep(`Iniciando Merge Sort (${ascending ? 'Ascendente' : 'Descendente'})`);
+    addStep(`Arreglo inicial: [${arr.join(', ')}]`);
   }
   
   if (arr.length <= 1) {
@@ -1034,7 +1117,7 @@ const mergeSort = async (arr, isRoot = true, depth = 0) => {
       mergeStepCounter++;
     };
     if (arr.length === 1) {
-      addStep(`${'  '.repeat(depth)}🔹 Caso base alcanzado: [${arr[0]}]`);
+      addStep(`${'  '.repeat(depth)}Caso base alcanzado: [${arr[0]}]`);
     }
     return arr;
   }
@@ -1051,9 +1134,9 @@ const mergeSort = async (arr, isRoot = true, depth = 0) => {
     mergeStepCounter++;
   };
   
-  addStep(`\n${'  '.repeat(depth)}✂️ Dividiendo: [${arr.join(', ')}]`);
-  addStep(`${'  '.repeat(depth)}   ⬅️ Izquierda: [${leftPart.join(', ')}]`);
-  addStep(`${'  '.repeat(depth)}   ➡️ Derecha: [${rightPart.join(', ')}]`);
+  addStep(`\n${'  '.repeat(depth)}Dividiendo: [${arr.join(', ')}]`);
+  addStep(`${'  '.repeat(depth)}   Izquierda: [${leftPart.join(', ')}]`);
+  addStep(`${'  '.repeat(depth)}   Derecha: [${rightPart.join(', ')}]`);
   
   const left = await mergeSort(leftPart, false, depth + 1);
   const right = await mergeSort(rightPart, false, depth + 1);
@@ -1078,25 +1161,25 @@ const merge = async (left, right, isRoot = false, depth = 0) => {
     mergeStepCounter++;
   };
   
-  addStep(`\n${'  '.repeat(depth)}🔀 Fusionando: [${left.join(', ')}] + [${right.join(', ')}]`);
+  addStep(`\n${'  '.repeat(depth)}Fusionando: [${left.join(', ')}] + [${right.join(', ')}]`);
   
   while (leftIndex < left.length && rightIndex < right.length) {
     const leftVal = left[leftIndex];
     const rightVal = right[rightIndex];
     
-    addStep(`${'  '.repeat(depth)}   🔎 Comparando: ${leftVal} vs ${rightVal}`);
+    addStep(`${'  '.repeat(depth)}   Comparando: ${leftVal} vs ${rightVal}`);
     
     const takeLeft = ascending ? leftVal < rightVal : leftVal > rightVal;
     
     if (takeLeft) {
       result.push(leftVal);
       const comparison = ascending ? '<=' : '>=';
-      addStep(`${'  '.repeat(depth)}   ✅ ${leftVal} ${comparison} ${rightVal} → Tomar ${leftVal} de izquierda`);
+      addStep(`${'  '.repeat(depth)}   ${leftVal} ${comparison} ${rightVal} → Tomar ${leftVal} de izquierda`);
       leftIndex++;
     } else {
       result.push(rightVal);
       const comparison = ascending ? '<' : '>';
-      addStep(`${'  '.repeat(depth)}   ✅ ${rightVal} ${comparison} ${leftVal} → Tomar ${rightVal} de derecha`);
+      addStep(`${'  '.repeat(depth)}   ${rightVal} ${comparison} ${leftVal} → Tomar ${rightVal} de derecha`);
       rightIndex++;
     }
     
@@ -1107,19 +1190,19 @@ const merge = async (left, right, isRoot = false, depth = 0) => {
   // Agregar elementos restantes
   if (leftIndex < left.length) {
     const remaining = left.slice(leftIndex);
-    addStep(`${'  '.repeat(depth)}   📥 Agregando elementos restantes de izquierda: [${remaining.join(', ')}]`);
+    addStep(`${'  '.repeat(depth)}   Agregando elementos restantes de izquierda: [${remaining.join(', ')}]`);
     result = result.concat(remaining);
   }
   
   if (rightIndex < right.length) {
     const remaining = right.slice(rightIndex);
-    addStep(`${'  '.repeat(depth)}   📥 Agregando elementos restantes de derecha: [${remaining.join(', ')}]`);
+    addStep(`${'  '.repeat(depth)}   Agregando elementos restantes de derecha: [${remaining.join(', ')}]`);
     result = result.concat(remaining);
   }
   
   const merged = result;
   
-  addStep(`${'  '.repeat(depth)}✨ Resultado fusionado: [${merged.join(', ')}]`);
+  addStep(`${'  '.repeat(depth)}Resultado fusionado: [${merged.join(', ')}]`);
   
   // Solo animar fusiones significativas
   if (merged.length === bubbleArray.value.length || merged.length >= Math.floor(bubbleArray.value.length / 2)) {
@@ -1129,8 +1212,8 @@ const merge = async (left, right, isRoot = false, depth = 0) => {
   }
   
   if (isRoot) {
-    addStep(`\n🎉 Merge Sort completado`);
-    addStep(`📊 Arreglo final ordenado: [${merged.join(', ')}]`);
+    addStep(`\nMerge Sort completado`);
+    addStep(`Arreglo final ordenado: [${merged.join(', ')}]`);
     
     // Agregar todos los pasos
     stepLog.value = [...mergeSteps];
@@ -1147,19 +1230,22 @@ const shellSort = async (arr) => {
   const ascending = isAsc.value;
   const isManyElements = n > 50;
   
+  // Acumular pasos en un array temporal
+  const tempSteps = [];
+  
   const addStep = (text) => {
-    stepLog.value.push({
+    tempSteps.push({
       text: text,
       time: (stepCounter * 0.015).toFixed(3)
     });
     stepCounter++;
   };
   
-  addStep(`🚀 Iniciando Shell Sort (${ascending ? 'Ascendente' : 'Descendente'})`);
-  addStep(`📊 Arreglo inicial: [${array.join(', ')}]`);
+  addStep(`Iniciando Shell Sort (${ascending ? 'Ascendente' : 'Descendente'})`);
+  addStep(`Arreglo inicial: [${array.join(', ')}]`);
   
   for (let gap = Math.floor(n / 2); gap > 0; gap = Math.floor(gap / 2)) {
-    addStep(`\n🔢 Gap actual: ${gap}`);
+    addStep(`\nGap actual: ${gap}`);
     addStep(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     
     for (let i = gap; i < n; i++) {
@@ -1167,7 +1253,7 @@ const shellSort = async (arr) => {
       let j = i;
       
       if (!isManyElements || i % 10 === 0) {
-        addStep(`\n📌 Procesando elemento ${temp} en posición ${i}`);
+        addStep(`\nProcesando elemento ${temp} en posición ${i}`);
         addStep(`   Comparando con elementos a distancia ${gap}`);
       }
       
@@ -1182,38 +1268,41 @@ const shellSort = async (arr) => {
         comparisons++;
         const comparison = ascending ? '>' : '<';
         if (!isManyElements || comparisons % 3 === 0) {
-          addStep(`   🔎 Comparando: ${array[j - gap]} (pos ${j - gap}) ${comparison} ${temp}`);
-          addStep(`   ➡️ Moviendo ${array[j - gap]} de posición ${j - gap} a ${j}`);
+          addStep(`   Comparando: ${array[j - gap]} (pos ${j - gap}) ${comparison} ${temp}`);
+          addStep(`   Moviendo ${array[j - gap]} de posición ${j - gap} a ${j}`);
         }
         array[j] = array[j - gap];
         movements++;
         j -= gap;
         
         // Shell Sort es O(n^1.5) - más eficiente que O(n²)
-        await new Promise(resolve => setTimeout(resolve, isManyElements ? 3 : 15));
+        await new Promise(resolve => setTimeout(resolve, isManyElements ? 1 : 15));
       }
       
       if (j !== i) {
         array[j] = temp;
         if (!isManyElements) {
-          addStep(`   ✅ Insertando ${temp} en posición ${j}`);
-          addStep(`   📊 Comparaciones: ${comparisons}, Movimientos: ${movements}`);
+          addStep(`   Insertando ${temp} en posición ${j}`);
+          addStep(`   Comparaciones: ${comparisons}, Movimientos: ${movements}`);
         }
       } else if (!isManyElements) {
-        addStep(`   ⏭️ ${temp} permanece en posición ${i}`);
+        addStep(`   ${temp} permanece en posición ${i}`);
       }
     }
     
     // Solo animar al final de cada gap
     if (!isManyElements) {
-      addStep(`✨ Estado tras gap ${gap}: [${array.join(', ')}]`);
+      addStep(`Estado tras gap ${gap}: [${array.join(', ')}]`);
     }
     await animateArrayUpdate(array, true);
-    await new Promise(resolve => setTimeout(resolve, isManyElements ? 2 : 10));
+    await new Promise(resolve => setTimeout(resolve, isManyElements ? 1 : 10));
   }
   
-  addStep(`\n🎉 Shell Sort completado`);
-  addStep(`📊 Arreglo final ordenado: [${array.join(', ')}]`);
+  addStep(`\nShell Sort completado`);
+  addStep(`Arreglo final ordenado: [${array.join(', ')}]`);
+  
+  // Agregar todos los pasos acumulados al final
+  stepLog.value = tempSteps;
   
   return array;
 };
@@ -1221,12 +1310,22 @@ const shellSort = async (arr) => {
 // Función principal para ejecutar algoritmos
 const playSortingAlgorithm = async (algorithm) => {
   if (bubbleArray.value.length === 0) {
-    alert('Primero debes generar un arreglo');
+    Swal.fire({
+      icon: 'warning',
+      title: 'Atención',
+      text: 'Primero debes generar un arreglo',
+      confirmButtonColor: '#667eea'
+    });
     return;
   }
   
   if (isAlgorithmRunning.value) {
-    alert('Ya hay un algoritmo ejecutándose');
+    Swal.fire({
+      icon: 'info',
+      title: 'En proceso',
+      text: 'Ya hay un algoritmo ejecutándose',
+      confirmButtonColor: '#667eea'
+    });
     return;
   }
   
@@ -1292,7 +1391,12 @@ const playSortingAlgorithm = async (algorithm) => {
     
   } catch (error) {
     console.error('Error en algoritmo:', error);
-    alert('Error ejecutando el algoritmo: ' + error.message);
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: 'Error ejecutando el algoritmo: ' + error.message,
+      confirmButtonColor: '#667eea'
+    });
     stopRealTimeTimer(); // Detener cronómetro en caso de error
   } finally {
     isAlgorithmRunning.value = false;
@@ -1512,6 +1616,36 @@ h1 {
         &::-webkit-scrollbar-thumb {
           background: #c1c1c1;
           border-radius: 3px;
+        }
+      }
+
+      .running-indicator {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 8px;
+        padding: 15px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        font-size: 1.1rem;
+        font-weight: 600;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        animation: pulse 2s ease-in-out infinite;
+
+        i {
+          font-size: 1.3rem;
+        }
+      }
+
+      @keyframes pulse {
+        0%, 100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 0.85;
+          transform: scale(1.02);
         }
       }
     }
