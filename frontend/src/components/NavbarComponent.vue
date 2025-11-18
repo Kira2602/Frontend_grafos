@@ -77,6 +77,16 @@
                   >
                     Árboles Binarios
                   </li>
+
+                  <li
+                    role="menuitem"
+                    tabindex="0"
+                    @click="goDijkstra"
+                    @keydown.enter="goDijkstra"
+                    aria-label="Ir a Dijkstra"
+                  >
+                    Dijkstra
+                  </li>
                 </ul>
               </li>
 
@@ -171,6 +181,11 @@ const goArbolBinario = () => {
   router.push('/arbol-binario')
 }
 
+const goDijkstra = () => {
+  isOpen.value = false
+  router.push('/dijkstra')
+}
+
 const openHelp = () => {
   isOpen.value = false
   isHelpOpen.value = true
@@ -253,6 +268,18 @@ const helpCfg = computed(() => {
       youtubeUrl: `https://youtu.be/${videoId}?si=${si}`,
       embedQuery: `si=${si}`,
       pdfUrl: '/assets/pdf/arboles_guide.pdf',
+    }
+  }
+
+  if(name === 'dijkstra' || path === '/dijkstra') {
+    const videoId = 'EXAMPLE_VIDEO_ID'
+    const si = 'EXAMPLE_SI'
+    return {
+      heading: 'Dijkstra: Tutorial',
+      videoId,
+      youtubeUrl: `https://youtu.be/${videoId}?si=${si}`,
+      embedQuery: `si=${si}`,
+      pdfUrl: '/assets/pdf/dijkstra_guide.pdf',
     }
   }
 
