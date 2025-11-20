@@ -271,17 +271,16 @@ const helpCfg = computed(() => {
     }
   }
 
-  if(name === 'dijkstra' || path === '/dijkstra') {
-    const videoId = 'EXAMPLE_VIDEO_ID'
-    const si = 'EXAMPLE_SI'
-    return {
-      heading: 'Dijkstra: Tutorial',
-      videoId,
-      youtubeUrl: `https://youtu.be/${videoId}?si=${si}`,
-      embedQuery: `si=${si}`,
-      pdfUrl: '/assets/pdf/dijkstra_guide.pdf',
-    }
+  if (name === 'dijkstra' || path === '/dijkstra') {
+  return {
+    heading: 'Dijkstra: Tutorial',
+    // 🎥 Video embebido personalizado
+    youtubeUrl: 'https://www.youtube.com/embed/sxM0kXiBMhI?si=VPJ-uIe0TEc7di3I',
+    embedQuery: '',
+    videoId: '', // Se deja vacío para que use el youtubeUrl directo
+    pdfUrl: '/assets/pdf/dijkstra_guide.pdf', // Ruta de tu guía PDF
   }
+}
 
   return null
 })

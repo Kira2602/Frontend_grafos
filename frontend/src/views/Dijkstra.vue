@@ -1158,6 +1158,10 @@ function loadFromSerializable(obj) {
   cy.startBatch()
   cy.elements().remove()
 
+  // 🚿 Limpiar restos de highlight antes de importar
+  cy.nodes().forEach(n => n.removeClass('highlight highlight-max'))
+  cy.edges().forEach(e => e.removeClass('highlight highlight-max'))
+
   // 🎨 Restaurar configuración visual de la pizarra
   if (obj?.board) {
     theme.value = obj.board.theme ?? theme.value
