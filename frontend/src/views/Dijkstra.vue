@@ -169,6 +169,7 @@ let animator = null
 /* ===== MODAL DE OPCIONES DIJKSTRA ===== */
 const showDijkstraOptions = ref(false)
 const nodesForOptions = ref([])
+const lastDijkstraMode = ref('min') // 🔸 Guarda el último modo (min o max)
 
 function openDijkstraOptions(){
   // Actualizar lista de nodos justo antes de abrir
@@ -394,14 +395,15 @@ function resetVisuals(){
 const nextFrame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
 
 /* ======= Handler de Dijkstra ======= */
-async function onDijkstraConfirm({ source, target }){
+async function onDijkstraConfirm({ source, target, mode }) {
+  lastDijkstraMode.value = mode  // 🟠 Guarda el modo actual
   const g = buildGraphFromCy(cy)
 
-  if (!g.nodes.length){
+  if (!g.nodes.length) {
     await Swal.fire({
-      icon:'info',
-      title:'No hay grafo',
-      text:'Agrega nodos y aristas.',
+      icon: 'info',
+      title: 'No hay grafo',
+      text: 'Agrega nodos y aristas.',
       ...swalColors
     })
     return
@@ -411,16 +413,43 @@ async function onDijkstraConfirm({ source, target }){
 
   // Validar pesos no negativos
   const negs = findNegativeEdges()
-  if (negs.length){
+  if (negs.length) {
     await showNegativeEdgesAlert(negs)
     return
   }
 
-  // Ejecutar Dijkstra
-  const { dist, prev } = dijkstra(g, source)
-  const slack = calculateSlacks(g, dist)
+  // 🔸 Detectar modo (min o max)
+  const isMaxMode = mode === 'max'
+  let graphToUse = g
 
-  // Etiquetar nodos con distancias
+  if (isMaxMode) {
+    if (hasDirectedCycle(g)) {
+      await Swal.fire({
+        icon: 'warning',
+        title: 'No se puede maximizar',
+        html: 'El grafo tiene ciclos. La ruta más larga solo se puede calcular en un grafo <b>acíclico</b>.',
+        ...swalColors
+      })
+      return
+    }
+    graphToUse = {
+      nodes: g.nodes,
+      edges: g.edges.map(e => ({ ...e, w: -e.w }))
+    }
+  }
+
+  // Ejecutar Dijkstra
+  const { dist, prev } = dijkstra(graphToUse, source)
+
+  if (isMaxMode) {
+    for (const k of Object.keys(dist)) {
+      if (dist[k] !== Number.POSITIVE_INFINITY) {
+        dist[k] = -dist[k]
+      }
+    }
+  }
+
+  // Etiquetar nodos
   cy.nodes().forEach(n => {
     if (n.hasClass('text-block')) return
     const d = dist[n.id()]
@@ -429,61 +458,96 @@ async function onDijkstraConfirm({ source, target }){
     resizeNodeToLabel(n)
   })
 
-  // Etiquetar aristas con holguras
-  cy.edges().forEach(e => {
-    const u = e.source().id(), v = e.target().id()
-    const w = extractNumericWeight(e.data('weight')) || 0
-    const hasU = dist[u] !== Number.POSITIVE_INFINITY
-    const hasV = dist[v] !== Number.POSITIVE_INFINITY
-    const h = (hasU && hasV) ? (dist[v] - dist[u] - w) : 0
-    e.data('weight', `h=${h}\n${w}`)
-  })
+  // Etiquetar aristas (solo en modo min)
+  if (!isMaxMode) {
+    const slack = calculateSlacks(g, dist)
+    cy.edges().forEach(e => {
+      const u = e.source().id(), v = e.target().id()
+      const w = extractNumericWeight(e.data('weight')) || 0
+      const h = slack[`${u}->${v}`] ?? 0
+      e.data('weight', `h=${h}\n${w}`)
+    })
+  }
 
-  // Si hay destino, resaltar camino
+  // Animar camino
   if (target && g.nodes.includes(target)) {
     const path = reconstructPath(prev, source, target)
-
     if (path.length > 0) {
       await nextTick()
       await nextFrame()
+      await animator?.animatePath(path, {
+        color: isMaxMode ? '#ff9a3d' : '#5eb4ff',
+        step: 140
+      })
 
-      // Animar camino
-      await animator?.animatePath(path, { color:'#5eb4ff', step:140 })
-
-      // Resaltar aristas y nodos del camino
-      for (let i = 0; i < path.length - 1; i++){
+      for (let i = 0; i < path.length - 1; i++) {
         const u = path[i], v = path[i + 1]
-        cy.$(`edge[source="${u}"][target="${v}"]`).addClass('highlight')
-        cy.$id(u).addClass('highlight')
-        cy.$id(v).addClass('highlight')
+        cy.$(`edge[source="${u}"][target="${v}"]`).addClass(isMaxMode ? 'highlight-max' : 'highlight')
+        cy.$id(u).addClass(isMaxMode ? 'highlight-max' : 'highlight')
+        cy.$id(v).addClass(isMaxMode ? 'highlight-max' : 'highlight')
       }
 
       const distance = dist[target]
       const distText = distance === Number.POSITIVE_INFINITY ? '∞' : distance
-
       await Swal.fire({
-        icon:'success',
-        title:'Camino más corto',
-        html:`<b>${source}</b> → <b>${target}</b><br>Distancia: <b>${distText}</b>`,
+        icon: 'success',
+        title: isMaxMode ? 'Camino más largo' : 'Camino más corto',
+        html: `<b>${source}</b> → <b>${target}</b><br>Distancia: <b>${distText}</b>`,
         ...swalColors
       })
     } else {
       await Swal.fire({
-        icon:'info',
-        title:'Sin ruta',
-        text:`No existe camino de ${source} a ${target}.`,
+        icon: 'info',
+        title: 'Sin ruta',
+        text: `No existe camino de ${source} a ${target}.`,
         ...swalColors
       })
     }
   } else {
-    // Solo mostrar distancias desde el origen
     await Swal.fire({
-      icon:'success',
-      title:'Dijkstra ejecutado',
-      html:`Distancias calculadas desde <b>${source}</b>.<br>Las holguras aparecen en las aristas.`,
+      icon: 'success',
+      title: isMaxMode ? 'Rutas más largas calculadas' : 'Dijkstra ejecutado',
+      html: isMaxMode
+        ? `Se calcularon las rutas más largas desde <b>${source}</b> (sin ciclos).`
+        : `Distancias calculadas desde <b>${source}</b>.<br>Las holguras aparecen en las aristas.`,
       ...swalColors
     })
+    if (isMaxMode) {
+      await nextFrame()
+      cy.$('.highlight-max').forEach(ele => ele.style({
+        'background-color': '#ff9a3d',
+        'border-color': '#cc6a00',
+        'line-color': '#ff9a3d',
+        'target-arrow-color': '#ff9a3d',
+        'width': 3
+      }))
+      cy.style().update()
+    }
+
   }
+}
+
+function hasDirectedCycle(graph) {
+  const { nodes, edges } = graph
+  const adj = Object.fromEntries(nodes.map(n => [n, []]))
+  edges.forEach(e => adj[e.u].push(e.v))
+
+  const visited = new Set()
+  const stack = new Set()
+
+  function dfs(v) {
+    if (stack.has(v)) return true
+    if (visited.has(v)) return false
+    visited.add(v)
+    stack.add(v)
+    for (const nei of adj[v]) {
+      if (dfs(nei)) return true
+    }
+    stack.delete(v)
+    return false
+  }
+
+  return nodes.some(dfs)
 }
 
 /* ===================== CY INIT ===================== */
@@ -493,6 +557,16 @@ onMounted(() => {
     layout: { name:'preset' },
     wheelSensitivity: 0.25, minZoom:0.1, maxZoom:3,
     style: [
+      { selector:'node.highlight-max', style:{
+        'background-color':'#ff9a3d',
+        'border-color':'#cc6a00',
+        //'box-shadow':'0 0 18px rgba(255,154,61,.6)'
+      }},
+      { selector:'edge.highlight-max', style:{
+        'line-color':'#ff9a3d',
+        'target-arrow-color':'#ff9a3d',
+        'width':3
+      }},
       { selector:'node', style:{
         'shape':'ellipse', 'width':56, 'height':56,
         'background-color':'data(color)',
@@ -533,7 +607,7 @@ onMounted(() => {
       { selector:'node.highlight', style:{
         'background-color':'#5eb4ff',
         'border-color':'#2a7fc0',
-        'box-shadow':'0 0 18px rgba(94,180,255,.6)'
+        //'box-shadow':'0 0 18px rgba(94,180,255,.6)'
       }},
       { selector:'edge.highlight', style:{
         'line-color':'#5eb4ff',
@@ -1021,25 +1095,45 @@ async function exportZIP(base){
 
 /* ===== serialización / carga ===== */
 function serializeGraph(){
-  const nodes = cy.nodes().map(n => ({
-    id: n.id(),
-    label: n.data('label') ?? '',
-    color: n.data('color') ?? '#57c3d1',
-    borderColor: n.data('borderColor') ?? '#167293',
-    text: n.hasClass('text-block') ? (n.data('text') ?? '') : undefined,
-    classes: n.classes(),
-    position: n.position()
-  }))
-  const edges = cy.edges().map(e => ({
-    id: e.id(),
-    source: e.source().id(),
-    target: e.target().id(),
-    weight: String(e.data('weight') ?? ''),
-    classes: e.classes()
-  }))
+    const nodes = cy.nodes().map(n => {
+  let classes = n.classes()
+  // Solo mantener highlight / highlight-max si está activo
+  classes = classes.filter(c => c === 'highlight' || c === 'highlight-max' || c === 'text-block')
+      return {
+        id: n.id(),
+        label: n.data('label') ?? '',
+        color: n.data('color') ?? '#57c3d1',
+        borderColor: n.data('borderColor') ?? '#167293',
+        text: n.hasClass('text-block') ? (n.data('text') ?? '') : undefined,
+        classes,
+        position: n.position()
+      }
+    })
+
+    const edges = cy.edges().map(e => {
+      let classes = e.classes()
+      classes = classes.filter(c => c === 'highlight' || c === 'highlight-max')
+      return {
+        id: e.id(),
+        source: e.source().id(),
+        target: e.target().id(),
+        weight: String(e.data('weight') ?? ''),
+        classes
+      }
+    })
+
   return {
-    meta: { version: 1, exportedAt: new Date().toISOString() },
-    board: { theme: theme.value, color: color.value, image: image.value, showGrid: showGrid.value },
+    meta: {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      dijkstraMode: lastDijkstraMode.value || 'min' 
+    },
+    board: {
+      theme: theme.value,
+      color: color.value,
+      image: image.value,
+      showGrid: showGrid.value
+    },
     graph: { nodes, edges }
   }
 }
@@ -1054,7 +1148,7 @@ function updateUidFromElements(nodes = [], edges = []){
   uid = Math.max(uid, maxNum)
 }
 
-function loadFromSerializable(obj){
+function loadFromSerializable(obj) {
   const g = obj?.graph || obj?.elements || obj
   if (!g) throw new Error('Estructura inválida')
 
@@ -1064,13 +1158,15 @@ function loadFromSerializable(obj){
   cy.startBatch()
   cy.elements().remove()
 
-  if (obj?.board){
+  // 🎨 Restaurar configuración visual de la pizarra
+  if (obj?.board) {
     theme.value = obj.board.theme ?? theme.value
     color.value = obj.board.color ?? color.value
     image.value = obj.board.image ?? image.value
     showGrid.value = obj.board.showGrid ?? showGrid.value
   }
 
+  // 🟢 Agregar nodos
   nodes.forEach(n => {
     const data = n.data ? n.data : {
       id: n.id,
@@ -1080,10 +1176,17 @@ function loadFromSerializable(obj){
       text: n.text
     }
     const position = n.position || n?.data?.position || n?.pos || { x: 0, y: 0 }
-    const classes = (n.classes || n?.data?.classes || '').toString()
-    cy.add({ group:'nodes', data, position, classes })
+
+    // ✅ Asegura formato correcto de clases
+    const rawClasses = n.classes || n?.data?.classes || []
+    const classes = Array.isArray(rawClasses)
+      ? rawClasses.join(' ')
+      : String(rawClasses).replace(/,/g, ' ').trim()
+
+    cy.add({ group: 'nodes', data, position, classes })
   })
 
+  // 🟠 Agregar aristas
   edges.forEach(e => {
     const data = e.data ? e.data : {
       id: e.id ?? `e_${e.source}_${e.target}_${Date.now()}`,
@@ -1091,21 +1194,80 @@ function loadFromSerializable(obj){
       target: e.target ?? e?.data?.target,
       weight: String(e.weight ?? e?.data?.weight ?? '')
     }
-    const classes = (e.classes || e?.data?.classes || '').toString()
-    cy.add({ group:'edges', data, classes })
+
+    const rawClasses = e.classes || e?.data?.classes || []
+    const classes = Array.isArray(rawClasses)
+      ? rawClasses.join(' ')
+      : String(rawClasses).replace(/,/g, ' ').trim()
+
+    cy.add({ group: 'edges', data, classes })
   })
+
+  console.log('📥 [Import] Modo Dijkstra:', obj?.meta?.dijkstraMode)
+  console.log('📥 [Import] Nodos con clases highlight:', nodes.filter(n => n.classes?.includes('highlight')))
+  console.log('📥 [Import] Nodos con clases highlight-max:', nodes.filter(n => n.classes?.includes('highlight-max')))
+  console.log('📥 [Import] Aristas con highlight:', edges.filter(e => e.classes?.includes('highlight')))
+  console.log('📥 [Import] Aristas con highlight-max:', edges.filter(e => e.classes?.includes('highlight-max')))
 
   cy.endBatch()
 
-  cy.nodes().removeStyle()
-  cy.edges().removeStyle()
+  // 🔄 Refrescar estilos base y mostrar todo
+  cy.style().update()
   cy.edges().style({ 'display': 'element', 'opacity': 1 })
 
+  // 🧩 Compatibilidad con versiones antiguas (modo max)
+  if (obj?.meta?.dijkstraMode === 'max') {
+    const anyMax = cy.$('.highlight-max').nonempty()
+    const anyMin = cy.$('.highlight').nonempty()
+
+    // Si vienen con highlight normal, cámbialos a highlight-max
+    if (!anyMax && anyMin) {
+      cy.edges('.highlight').forEach(e => {
+        e.removeClass('highlight')
+        e.addClass('highlight-max')
+      })
+      cy.nodes('.highlight').forEach(n => {
+        n.removeClass('highlight')
+        n.addClass('highlight-max')
+      })
+    }
+  }
+
+  // 🧠 Recalcular layout visual
   cy.fit(undefined, 24)
+  cy.style().update()
   updateUidFromElements(nodes, edges)
   cy.nodes().forEach(n => resizeNodeToLabel(n))
-}
 
+  // 🧡 FIX FINAL: repintar rutas max (corrige el bug visual)
+    requestAnimationFrame(() => {
+    const maxNodes = cy.$('.highlight-max')
+    const maxEdges = cy.$('edge.highlight-max')
+
+    console.log('🎨 [Repaint-FIX] Nodos highlight-max:', maxNodes.length)
+    console.log('🎨 [Repaint-FIX] Aristas highlight-max:', maxEdges.length)
+
+    if (maxNodes.length || maxEdges.length) {
+      maxNodes.forEach(n => {
+        n.style({
+          'background-color': '#ff9a3d',
+          'border-color': '#cc6a00',
+          'transition-property': 'none'
+        })
+      })
+      maxEdges.forEach(e => {
+        e.style({
+          'line-color': '#ff9a3d',
+          'target-arrow-color': '#ff9a3d',
+          'width': 3,
+          'transition-property': 'none'
+        })
+      })
+      cy.style().update()
+      setTimeout(() => cy.style().update(), 150) // 🔁 Refuerzo final
+    }
+  })
+}
 async function importJSON(ev){
   const file = ev?.target?.files?.[0]
   if (!file) return
@@ -1268,7 +1430,13 @@ $shadow: 0 10px 24px rgba(0,0,0,.25);
 .graph-layer { position: absolute; inset: 0; z-index: 0; }
 
 :deep(.swal2-html-container code){ background:#1e2430; color:#e7e7ec; padding:2px 5px; border-radius:4px; }
-
+:deep(.cytoscape-container) {
+  .highlight-max {
+    background-color: #ff9a3d !important;
+    border-color: #cc6a00 !important;
+    box-shadow: 0 0 18px rgba(255,154,61,0.6) !important;
+  }
+}
 @media (max-width: 900px){ .toolbar{ gap:10px; .tools-right{ margin-left:auto; } } }
 @media (max-width: 640px){ .toolbar{ flex-direction: column; align-items: stretch; .tools-left, .tools-right{ justify-content: flex-start; } } }
 </style>
