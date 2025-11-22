@@ -109,11 +109,14 @@
       @confirm="onNodePropsConfirm"
     />
 
-    <!-- Matriz de adyacencia -->
+    <!-- Matriz de adyacencia + camino de Dijkstra -->
     <MatrizPopup
       v-model="showMatriz"
       :nodes="matrizLabels"
       :matrix="matrizValues"
+      :matches="matrizMatches"
+      :heatmap="false"
+      :heatMode="lastDijkstraMode === 'max' ? 'max' : 'min'"
     />
 
     <!-- Popup: nombre de archivo -->
@@ -348,9 +351,11 @@ function onNodePropsConfirm({ name, color }){
 const showMatriz   = ref(false)
 const matrizLabels = ref([])
 const matrizValues = ref([])
+const matrizMatches = ref([])     // 🔹 celdas [i,j] del último camino
+const lastPath = ref([])         // 🔹 secuencia de nodos del último camino Dijkstra
 
 function computeAdjacency(){
-  if (!cy) return { labels: [], matrix: [] }
+  if (!cy) return { labels: [], matrix: [], matches: [] }
 
   const list = cy.nodes().filter(n => !n.hasClass('text-block'))
   const ordered = list.sort((a, b) =>
@@ -362,6 +367,7 @@ function computeAdjacency(){
 
   const n = ordered.length
   const M = Array.from({ length: n }, () => Array(n).fill(0))
+
   cy.edges().forEach(e => {
     const s = idx[e.source().id()]
     const t = idx[e.target().id()]
@@ -370,13 +376,29 @@ function computeAdjacency(){
     const safe = Number.isFinite(w) ? w : 1
     M[s][t] += safe
   })
-  return { labels, matrix: M }
+
+  // 🔹 Construir matches a partir del último camino
+  const matches = []
+  if (lastPath.value.length > 1) {
+    for (let k = 0; k < lastPath.value.length - 1; k++) {
+      const u = lastPath.value[k]
+      const v = lastPath.value[k + 1]
+      const i = idx[u]
+      const j = idx[v]
+      if (i != null && j != null) {
+        matches.push([i, j])
+      }
+    }
+  }
+
+  return { labels, matrix: M, matches }
 }
 
 function openMatriz () {
-  const { labels, matrix } = computeAdjacency()
+  const { labels, matrix, matches } = computeAdjacency()
   matrizLabels.value = labels
   matrizValues.value = matrix
+  matrizMatches.value = matches
   showMatriz.value = true
 }
 
@@ -396,7 +418,10 @@ const nextFrame = () => new Promise(r => requestAnimationFrame(() => requestAnim
 
 /* ======= Handler de Dijkstra ======= */
 async function onDijkstraConfirm({ source, target, mode }) {
-  lastDijkstraMode.value = mode  // 🟠 Guarda el modo actual
+  lastDijkstraMode.value = mode       // 🟠 Guarda el modo actual
+  lastPath.value = []                 // 🧼 limpiar último camino
+  matrizMatches.value = []            // 🧼 limpiar resaltado de matriz
+
   const g = buildGraphFromCy(cy)
 
   if (!g.nodes.length) {
@@ -469,10 +494,13 @@ async function onDijkstraConfirm({ source, target, mode }) {
     })
   }
 
-  // Animar camino
+  // Animar camino si hay destino
   if (target && g.nodes.includes(target)) {
     const path = reconstructPath(prev, source, target)
+
     if (path.length > 0) {
+      lastPath.value = path.slice()   // 🔹 guardar camino para la matriz
+
       await nextTick()
       await nextFrame()
       await animator?.animatePath(path, {
@@ -496,6 +524,7 @@ async function onDijkstraConfirm({ source, target, mode }) {
         ...swalColors
       })
     } else {
+      lastPath.value = []
       await Swal.fire({
         icon: 'info',
         title: 'Sin ruta',
@@ -504,6 +533,7 @@ async function onDijkstraConfirm({ source, target, mode }) {
       })
     }
   } else {
+    lastPath.value = []
     await Swal.fire({
       icon: 'success',
       title: isMaxMode ? 'Rutas más largas calculadas' : 'Dijkstra ejecutado',
@@ -512,18 +542,6 @@ async function onDijkstraConfirm({ source, target, mode }) {
         : `Distancias calculadas desde <b>${source}</b>.<br>Las holguras aparecen en las aristas.`,
       ...swalColors
     })
-    if (isMaxMode) {
-      await nextFrame()
-      cy.$('.highlight-max').forEach(ele => ele.style({
-        'background-color': '#ff9a3d',
-        'border-color': '#cc6a00',
-        'line-color': '#ff9a3d',
-        'target-arrow-color': '#ff9a3d',
-        'width': 3
-      }))
-      cy.style().update()
-    }
-
   }
 }
 
@@ -560,7 +578,6 @@ onMounted(() => {
       { selector:'node.highlight-max', style:{
         'background-color':'#ff9a3d',
         'border-color':'#cc6a00',
-        //'box-shadow':'0 0 18px rgba(255,154,61,.6)'
       }},
       { selector:'edge.highlight-max', style:{
         'line-color':'#ff9a3d',
@@ -607,7 +624,6 @@ onMounted(() => {
       { selector:'node.highlight', style:{
         'background-color':'#5eb4ff',
         'border-color':'#2a7fc0',
-        //'box-shadow':'0 0 18px rgba(94,180,255,.6)'
       }},
       { selector:'edge.highlight', style:{
         'line-color':'#5eb4ff',
@@ -1095,38 +1111,37 @@ async function exportZIP(base){
 
 /* ===== serialización / carga ===== */
 function serializeGraph(){
-    const nodes = cy.nodes().map(n => {
-  let classes = n.classes()
-  // Solo mantener highlight / highlight-max si está activo
-  classes = classes.filter(c => c === 'highlight' || c === 'highlight-max' || c === 'text-block')
-      return {
-        id: n.id(),
-        label: n.data('label') ?? '',
-        color: n.data('color') ?? '#57c3d1',
-        borderColor: n.data('borderColor') ?? '#167293',
-        text: n.hasClass('text-block') ? (n.data('text') ?? '') : undefined,
-        classes,
-        position: n.position()
-      }
-    })
+  const nodes = cy.nodes().map(n => {
+    let classes = n.classes()
+    classes = classes.filter(c => c === 'highlight' || c === 'highlight-max' || c === 'text-block')
+    return {
+      id: n.id(),
+      label: n.data('label') ?? '',
+      color: n.data('color') ?? '#57c3d1',
+      borderColor: n.data('borderColor') ?? '#167293',
+      text: n.hasClass('text-block') ? (n.data('text') ?? '') : undefined,
+      classes,
+      position: n.position()
+    }
+  })
 
-    const edges = cy.edges().map(e => {
-      let classes = e.classes()
-      classes = classes.filter(c => c === 'highlight' || c === 'highlight-max')
-      return {
-        id: e.id(),
-        source: e.source().id(),
-        target: e.target().id(),
-        weight: String(e.data('weight') ?? ''),
-        classes
-      }
-    })
+  const edges = cy.edges().map(e => {
+    let classes = e.classes()
+    classes = classes.filter(c => c === 'highlight' || c === 'highlight-max')
+    return {
+      id: e.id(),
+      source: e.source().id(),
+      target: e.target().id(),
+      weight: String(e.data('weight') ?? ''),
+      classes
+    }
+  })
 
   return {
     meta: {
       version: 1,
       exportedAt: new Date().toISOString(),
-      dijkstraMode: lastDijkstraMode.value || 'min' 
+      dijkstraMode: lastDijkstraMode.value || 'min'
     },
     board: {
       theme: theme.value,
@@ -1140,7 +1155,7 @@ function serializeGraph(){
 
 function updateUidFromElements(nodes = [], edges = []){
   let maxNum = uid
-  const rx = /(\d+)$/
+  const rx = /(\d+)$/ 
   ;[...nodes, ...edges].forEach(el => {
     const m = (el.id || '').match(rx)
     if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10) + 1)
@@ -1158,11 +1173,9 @@ function loadFromSerializable(obj) {
   cy.startBatch()
   cy.elements().remove()
 
-  // 🚿 Limpiar restos de highlight antes de importar
   cy.nodes().forEach(n => n.removeClass('highlight highlight-max'))
   cy.edges().forEach(e => e.removeClass('highlight highlight-max'))
 
-  // 🎨 Restaurar configuración visual de la pizarra
   if (obj?.board) {
     theme.value = obj.board.theme ?? theme.value
     color.value = obj.board.color ?? color.value
@@ -1170,7 +1183,6 @@ function loadFromSerializable(obj) {
     showGrid.value = obj.board.showGrid ?? showGrid.value
   }
 
-  // 🟢 Agregar nodos
   nodes.forEach(n => {
     const data = n.data ? n.data : {
       id: n.id,
@@ -1181,7 +1193,6 @@ function loadFromSerializable(obj) {
     }
     const position = n.position || n?.data?.position || n?.pos || { x: 0, y: 0 }
 
-    // ✅ Asegura formato correcto de clases
     const rawClasses = n.classes || n?.data?.classes || []
     const classes = Array.isArray(rawClasses)
       ? rawClasses.join(' ')
@@ -1190,7 +1201,6 @@ function loadFromSerializable(obj) {
     cy.add({ group: 'nodes', data, position, classes })
   })
 
-  // 🟠 Agregar aristas
   edges.forEach(e => {
     const data = e.data ? e.data : {
       id: e.id ?? `e_${e.source}_${e.target}_${Date.now()}`,
@@ -1207,24 +1217,15 @@ function loadFromSerializable(obj) {
     cy.add({ group: 'edges', data, classes })
   })
 
-  console.log('📥 [Import] Modo Dijkstra:', obj?.meta?.dijkstraMode)
-  console.log('📥 [Import] Nodos con clases highlight:', nodes.filter(n => n.classes?.includes('highlight')))
-  console.log('📥 [Import] Nodos con clases highlight-max:', nodes.filter(n => n.classes?.includes('highlight-max')))
-  console.log('📥 [Import] Aristas con highlight:', edges.filter(e => e.classes?.includes('highlight')))
-  console.log('📥 [Import] Aristas con highlight-max:', edges.filter(e => e.classes?.includes('highlight-max')))
-
   cy.endBatch()
 
-  // 🔄 Refrescar estilos base y mostrar todo
   cy.style().update()
   cy.edges().style({ 'display': 'element', 'opacity': 1 })
 
-  // 🧩 Compatibilidad con versiones antiguas (modo max)
   if (obj?.meta?.dijkstraMode === 'max') {
     const anyMax = cy.$('.highlight-max').nonempty()
     const anyMin = cy.$('.highlight').nonempty()
 
-    // Si vienen con highlight normal, cámbialos a highlight-max
     if (!anyMax && anyMin) {
       cy.edges('.highlight').forEach(e => {
         e.removeClass('highlight')
@@ -1237,19 +1238,14 @@ function loadFromSerializable(obj) {
     }
   }
 
-  // 🧠 Recalcular layout visual
   cy.fit(undefined, 24)
   cy.style().update()
   updateUidFromElements(nodes, edges)
   cy.nodes().forEach(n => resizeNodeToLabel(n))
 
-  // 🧡 FIX FINAL: repintar rutas max (corrige el bug visual)
-    requestAnimationFrame(() => {
+  requestAnimationFrame(() => {
     const maxNodes = cy.$('.highlight-max')
     const maxEdges = cy.$('edge.highlight-max')
-
-    console.log('🎨 [Repaint-FIX] Nodos highlight-max:', maxNodes.length)
-    console.log('🎨 [Repaint-FIX] Aristas highlight-max:', maxEdges.length)
 
     if (maxNodes.length || maxEdges.length) {
       maxNodes.forEach(n => {
@@ -1268,7 +1264,7 @@ function loadFromSerializable(obj) {
         })
       })
       cy.style().update()
-      setTimeout(() => cy.style().update(), 150) // 🔁 Refuerzo final
+      setTimeout(() => cy.style().update(), 150)
     }
   })
 }
@@ -1292,7 +1288,6 @@ async function importJSON(ev){
 
     loadFromSerializable(obj)
 
-    // Revisar pesos negativos y ofrecer normalizar
     const negs = findNegativeEdges()
     if (negs.length){
       const sample = negs.slice(0,5).map(x=>`${x.u}→${x.v} (w=${x.w})`).join('<br>')
@@ -1371,6 +1366,8 @@ async function confirmClear(e){
     resetVisuals()
     clearPendingConnect()
     nodeMode.value = connectMode.value = deleteMode.value = moveMode.value = textMode.value = false
+    lastPath.value = []
+    matrizMatches.value = []
     applyGrabRules()
   }
 }

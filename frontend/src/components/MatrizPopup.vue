@@ -59,7 +59,7 @@ const props = defineProps({
   // Matriz rectangular (opcional, para asignación)
   rowLabels: { type: Array, default: null },
   colLabels: { type: Array, default: null },
-  // Celdas seleccionadas (Hungarian o Kruskal)
+  // Celdas seleccionadas (Hungarian / Dijkstra / Kruskal, etc.)
   matches:   { type: Array,  default: () => [] }, // [[i,j], ...] 0-based
   total:     { type: Number, default: null },
   // Heatmap
@@ -152,8 +152,6 @@ function isAssigned(i,j) { return matchSet.value.has(`${i}-${j}`) }
 /* --------- clases/estilos de celdas --------- */
 function cellClass(i, j) {
   const assigned = isAssigned(i, j)
-
-  // extremos solo para heatmap
   const ext = props.heatmap && isExtreme(i, j)
 
   return {
@@ -185,14 +183,14 @@ function cellStyle(i, j, val) {
   const base = colorFor(val)
   if (base) styles.background = base
 
-  // Celdas asignadas (Hungarian o MST)
+  // Celdas asignadas (Hungarian, camino de Dijkstra, etc.)
   if (isAssigned(i, j)) {
     if (props.heatMode === 'max') {
-      // modo maximizar → naranja (MST max o asignación max)
+      // modo maximizar → naranja
       styles.outline = '2px solid #ff9a3d'
       styles.boxShadow = 'inset 0 0 0 9999px rgba(255,154,61,.20)'
     } else {
-      // modo minimizar → azul (MST min o asignación min)
+      // modo minimizar → azul
       styles.outline = '2px solid #5eb4ff'
       styles.boxShadow = 'inset 0 0 0 9999px rgba(94,180,255,.20)'
     }
@@ -311,7 +309,7 @@ function cellStyle(i, j, val) {
   border-right: 1px solid rgba(255,255,255,.12);
 }
 
-/* Asignadas - estilo base (reforzado por estilos inline) */
+/* Asignadas - estilo base (el color lo define cellStyle) */
 .matrix-table td.match {
   position: relative;
 }
