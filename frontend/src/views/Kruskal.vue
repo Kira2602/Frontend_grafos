@@ -43,21 +43,21 @@
 
       <!-- ===================== PIZARRA ===================== -->
       <div
-            class="board"
-            ref="boardRef"
-            :class="[themeClass, { 'no-grid': !showGrid }]"
-            :style="boardStyle"
-            role="region"
-            aria-label="Pizarra de grafos"
-            >
+        class="board"
+        ref="boardRef"
+        :class="[themeClass, { 'no-grid': !showGrid }]"
+        :style="boardStyle"
+        role="region"
+        aria-label="Pizarra de grafos"
+      >
         <div ref="cyRef" class="graph-layer"></div>
 
         <!-- FAB derecha -->
         <button class="fab fab-clear" title="Limpiar pizarra" type="button" @click.stop="confirmClear">
-            <i class="fa-solid fa-broom"></i>
+          <i class="fa-solid fa-broom"></i>
         </button>
         <button class="fab" @click.stop="showPicker = true" title="Cambiar estilo" type="button">
-         <i class="fa-solid fa-palette"></i>
+          <i class="fa-solid fa-palette"></i>
         </button>
 
         <!-- FAB izquierda: KRUSKAL -->
@@ -78,18 +78,19 @@
     </div>
 
     <EstiloPizarra
-        v-model="showPicker"
-        :theme="theme"
-        :color="color"
-        :image="image"
-        @confirm="applyTheme"
-        />
+      v-model="showPicker"
+      :theme="theme"
+      :color="color"
+      :image="image"
+      @confirm="applyTheme"
+    />
 
-        <ExportPopup
-        v-model="showExport"
-        title="Exportar pizarra"
-        @select="handleExport"
-        />
+    <ExportPopup
+      v-model="showExport"
+      title="Exportar pizarra"
+      @select="handleExport"
+    />
+
     <EdgePropsPopup
       v-model="showEdgeProps"
       :source-label="edgeCtx.sourceLabel"
@@ -112,8 +113,16 @@
       @confirm="onNodePropsConfirm"
     />
 
-    <!-- Matriz -->
-    <MatrizPopup v-model="showMatriz" :nodes="matrizLabels" :matrix="matrizValues" />
+    <!-- Matriz de adyacencia (pinta solo el MST) -->
+    <MatrizPopup
+      v-model="showMatriz"
+      :nodes="matrizLabels"
+      :matrix="matrizValues"
+      :matches="mstMatrixMatches"
+      :total="mstTotal"
+      :heatmap="false"
+      :heat-mode="mstHeatMode"
+    />
 
     <!-- Popup nombre archivo -->
     <NombreArchivoPopup
@@ -126,7 +135,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import EstiloPizarra from '@/components/EstiloPizarra.vue'
 import ExportPopup from '@/components/ExportPopup.vue'
 import EdgePropsPopup from '@/components/EdgePropsPopup.vue'
@@ -139,7 +148,7 @@ import cytoscape from 'cytoscape'
 import Swal from 'sweetalert2'
 import 'sweetalert2/dist/sweetalert2.min.css'
 
-/* 🔸 Importa tu algoritmo de Kruskal */
+/* 🔸 Algoritmo de Kruskal */
 import {
   kruskal,
   buildGraphFromCy,
@@ -156,6 +165,11 @@ let animator = null
 
 const swalColors = { confirmButtonColor: '#567c8d', cancelButtonColor: '#2f4156' }
 
+/* 🔹 Estado del último MST (para la matriz) */
+const lastMst = ref([])              // [{u,v,w}, ...]
+const lastKruskalMode = ref('asc')   // 'asc' | 'desc'
+const lastTotal = ref(null)          // peso total
+
 /* =====================================================
    🟩 EJECUCIÓN DEL ALGORITMO DE KRUSKAL
 ===================================================== */
@@ -163,7 +177,10 @@ async function openKruskalOptions() {
   const { value: mode } = await Swal.fire({
     title: 'Ejecutar Kruskal',
     input: 'select',
-    inputOptions: { asc: 'Árbol de expansión mínimo', desc: 'Árbol de expansión máximo' },
+    inputOptions: {
+      asc: 'Árbol de expansión mínimo',
+      desc: 'Árbol de expansión máximo'
+    },
     inputPlaceholder: 'Selecciona el modo',
     showCancelButton: true,
     confirmButtonText: 'Ejecutar',
@@ -174,23 +191,27 @@ async function openKruskalOptions() {
 }
 
 async function runKruskal(mode = 'asc') {
-  const g = buildGraphFromCy(cy);
+  const g = buildGraphFromCy(cy)
   if (!g.nodes.length || !g.edges.length) {
     await Swal.fire({
       icon: 'info',
       title: 'Grafo vacío',
       text: 'Agrega nodos y aristas antes de ejecutar Kruskal.',
       ...swalColors
-    });
-    return;
+    })
+    return
   }
 
-  // 🔹 Limpia rutas previas (resaltados anteriores)
-  cy.elements().removeClass('highlight highlight-max');
+  // 🔹 Limpia rutas previas
+  cy.elements().removeClass('highlight highlight-max')
+  clearStyles(cy)
 
-  clearStyles(cy);
+  const { mst, totalWeight } = kruskal(g, mode)
 
-  const { mst, totalWeight } = kruskal(g, mode);
+  // 🔹 Guardar MST para la matriz
+  lastMst.value = mst || []
+  lastKruskalMode.value = mode
+  lastTotal.value = totalWeight ?? null
 
   if (!mst.length) {
     await Swal.fire({
@@ -198,33 +219,38 @@ async function runKruskal(mode = 'asc') {
       title: 'Sin resultados',
       text: 'No se pudo construir un árbol de expansión (grafo posiblemente desconectado).',
       ...swalColors
-    });
-    return;
+    })
+    return
   }
 
-  // 🔹 Animación paso a paso con animateEdges()
+  // 🔹 Animación paso a paso
   for (const edge of mst) {
-    const e = cy.$(`edge[source="${edge.u}"][target="${edge.v}"], edge[source="${edge.v}"][target="${edge.u}"]`);
+    const e = cy.$(
+      `edge[source="${edge.u}"][target="${edge.v}"], edge[source="${edge.v}"][target="${edge.u}"]`
+    )
     if (!e.empty()) {
       await animator.animateEdges(e, {
         color: mode === 'desc' ? '#ff9a3d' : '#57c3d1',
         edgeDuration: 220,
         nodeDuration: 200,
         step: 100
-      });
+      })
     }
   }
 
   // 🔹 Aplica color final según tipo
-  paintMstEdges(cy, mst, mode === 'desc');
+  paintMstEdges(cy, mst, mode === 'desc')
 
   await Swal.fire({
     icon: 'success',
     title: mode === 'desc' ? 'Árbol de expansión máximo' : 'Árbol de expansión mínimo',
-    html: `Se seleccionaron <b>${mst.length}</b> aristas.<br>Peso total: <b>${totalWeight.toFixed(2)}</b>`,
+    html: `Se seleccionaron <b>${mst.length}</b> aristas.<br>Peso total: <b>${totalWeight.toFixed(
+      2
+    )}</b>`,
     ...swalColors
-  });
+  })
 }
+
 /* =====================================================
    🟩 MODO DE EDICIÓN / NODOS / ARISTAS
 ===================================================== */
@@ -253,11 +279,12 @@ const swalBase = { confirmButtonColor: '#567c8d', cancelButtonColor: '#2f4156' }
 const showEdgeProps = ref(false)
 const edgeCtx = ref({
   sId: null, tId: null, editId: null, isLoop: false,
-  sourceLabel: '', targetLabel: '', defaultWeight: '1', initialDir: 'forward'
+  sourceLabel: '', targetLabel: '', defaultWeight: '1', initialDir: 'undirected'
 })
 
-function openEdgeProps({ sId, tId, editId = null, defaultWeight = '1', initialDir = 'forward' }) {
-  const s = cy.$id(sId); const t = cy.$id(tId)
+function openEdgeProps({ sId, tId, editId = null, defaultWeight = '1', initialDir = 'undirected' }) {
+  const s = cy.$id(sId)
+  const t = cy.$id(tId)
   edgeCtx.value = {
     sId, tId, editId, isLoop: sId === tId,
     sourceLabel: s?.data('label') || sId,
@@ -268,7 +295,7 @@ function openEdgeProps({ sId, tId, editId = null, defaultWeight = '1', initialDi
   showEdgeProps.value = true
 }
 
-async function onEdgePropsConfirm({ weight, dir }) {
+async function onEdgePropsConfirm({ weight /*, dir */ }) {
   const { sId, tId, editId } = edgeCtx.value
   const w = Number(weight)
   if (Number.isNaN(w)) {
@@ -350,14 +377,17 @@ function onNodePropsConfirm({ name, color }) {
 }
 
 /* =====================================================
-   🟩 MATRIZ DE ADYACENCIA
+   🟩 MATRIZ DE ADYACENCIA (MST)
 ===================================================== */
 const showMatriz = ref(false)
 const matrizLabels = ref([])
 const matrizValues = ref([])
+const mstMatrixMatches = ref([]) // celdas [i,j] que pertenecen al MST
+const mstTotal = ref(null)
+const mstHeatMode = ref('min')
 
 function computeAdjacency() {
-  if (!cy) return { labels: [], matrix: [] }
+  if (!cy) return { labels: [], matrix: [], idIndex: {} }
   const list = cy.nodes().filter(n => !n.hasClass('text-block'))
   const ordered = list.sort((a, b) =>
     (a.data('label') || a.id()).localeCompare(
@@ -371,21 +401,39 @@ function computeAdjacency() {
   const idx = Object.fromEntries(ordered.map((n, i) => [n.id(), i]))
   const n = ordered.length
   const M = Array.from({ length: n }, () => Array(n).fill(0))
+
   cy.edges().forEach(e => {
     const s = idx[e.source().id()]
     const t = idx[e.target().id()]
     if (s == null || t == null) return
     const w = Number(e.data('weight')) || 0
     M[s][t] = w
-    M[t][s] = w // ✅ Grafo no dirigido
+    M[t][s] = w // ✅ grafo no dirigido
   })
-  return { labels, matrix: M }
+
+  return { labels, matrix: M, idIndex: idx }
 }
 
 function openMatriz() {
-  const { labels, matrix } = computeAdjacency()
+  const { labels, matrix, idIndex } = computeAdjacency()
   matrizLabels.value = labels
   matrizValues.value = matrix
+
+  const matches = []
+  if (lastMst.value?.length) {
+    lastMst.value.forEach(({ u, v }) => {
+      const i = idIndex[u]
+      const j = idIndex[v]
+      if (i != null && j != null) {
+        matches.push([i, j])
+        matches.push([j, i]) // simétrico
+      }
+    })
+  }
+  mstMatrixMatches.value = matches
+  mstTotal.value = typeof lastTotal.value === 'number' ? lastTotal.value : null
+  mstHeatMode.value = lastKruskalMode.value === 'desc' ? 'max' : 'min'
+
   showMatriz.value = true
 }
 
@@ -402,38 +450,45 @@ onMounted(() => {
     style: [
       { selector: 'node.highlight-max', style: { 'background-color': '#ff9a3d', 'border-color': '#cc6a00' } },
       { selector: 'edge.highlight-max', style: { 'line-color': '#ff9a3d', 'width': 3 } },
-      { selector: 'node', style: {
-        'shape': 'ellipse',
-        'width': 56,
-        'height': 56,
-        'background-color': 'data(color)',
-        'border-width': 2,
-        'border-color': 'data(borderColor)',
-        'label': 'data(label)',
-        'color': '#0f1120',
-        'font-family': 'Poppins, sans-serif',
-        'font-weight': 700,
-        'font-size': 12,
-        'text-valign': 'center',
-        'text-halign': 'center',
-        'text-wrap': 'wrap',
-        'text-max-width': 120
-      }},
-      { selector: 'edge', style: {
-        'width': 2,
-        'line-color': '#000',
-        'target-arrow-color': '#000',
-        'target-arrow-shape': 'triangle',
-        'curve-style': 'bezier',
-        'label': 'data(weight)',
-        'color': '#fff',
-        'font-size': 12,
-        'text-wrap': 'wrap',
-        'text-background-color': '#2c2f3a',
-        'text-background-opacity': 0.85,
-        'text-background-padding': 2,
-        'text-rotation': 'autorotate'
-      }},
+      {
+        selector: 'node',
+        style: {
+          'shape': 'ellipse',
+          'width': 56,
+          'height': 56,
+          'background-color': 'data(color)',
+          'border-width': 2,
+          'border-color': 'data(borderColor)',
+          'label': 'data(label)',
+          'color': '#0f1120',
+          'font-family': 'Poppins, sans-serif',
+          'font-weight': 700,
+          'font-size': 12,
+          'text-valign': 'center',
+          'text-halign': 'center',
+          'text-wrap': 'wrap',
+          'text-max-width': 120
+        }
+      },
+      {
+        selector: 'edge',
+        style: {
+          'width': 2,
+          'line-color': '#000',
+          'curve-style': 'bezier',
+          // 🔁 Sin dirección (grafo no dirigido)
+          'target-arrow-shape': 'none',
+          'source-arrow-shape': 'none',
+          'label': 'data(weight)',
+          'color': '#fff',
+          'font-size': 12,
+          'text-wrap': 'wrap',
+          'text-background-color': '#2c2f3a',
+          'text-background-opacity': 0.85,
+          'text-background-padding': 2,
+          'text-rotation': 'autorotate'
+        }
+      },
       { selector: 'node.highlight', style: { 'background-color': '#5eb4ff', 'border-color': '#2a7fc0' } },
       { selector: 'edge.highlight', style: { 'line-color': '#5eb4ff', 'width': 3 } }
     ]
@@ -465,7 +520,8 @@ onMounted(() => {
 
     if (connectMode.value) {
       if (ele.isEdge() && isDoubleTap(ele.id())) {
-        const sId = ele.source().id(), tId = ele.target().id()
+        const sId = ele.source().id()
+        const tId = ele.target().id()
         openEdgeProps({ sId, tId, editId: ele.id(), defaultWeight: ele.data('weight') ?? '1' })
         return
       }
@@ -475,7 +531,8 @@ onMounted(() => {
           connectFromId = clickedId
           cy.$id(clickedId).addClass('edge-pending')
         } else {
-          const sId = connectFromId, tId = clickedId
+          const sId = connectFromId
+          const tId = clickedId
           cy.$id(sId).removeClass('edge-pending')
           connectFromId = null
           openEdgeProps({ sId, tId, defaultWeight: '1' })
@@ -490,14 +547,20 @@ onMounted(() => {
     }
 
     if (ele.isEdge() && isDoubleTap(ele.id())) {
-      const sId = ele.source().id(), tId = ele.target().id()
+      const sId = ele.source().id()
+      const tId = ele.target().id()
       openEdgeProps({ sId, tId, editId: ele.id(), defaultWeight: ele.data('weight') ?? '1' })
     }
   })
 
   const onKey = (e) => {
     if (e.key === 'Escape') {
-      nodeMode.value = connectMode.value = deleteMode.value = moveMode.value = textMode.value = false
+      nodeMode.value =
+        connectMode.value =
+        deleteMode.value =
+        moveMode.value =
+        textMode.value =
+          false
       clearPendingConnect()
       applyGrabRules()
     }
@@ -537,23 +600,34 @@ function darkenColor(hex, percent = 25) {
   try {
     const h = hex.replace('#', '')
     const bigint = parseInt(h.length === 3 ? h.split('').map(x => x + x).join('') : h, 16)
-    let r = (bigint >> 16) & 255, g = (bigint >> 8) & 255, b = bigint & 255
+    let r = (bigint >> 16) & 255
+    let g = (bigint >> 8) & 255
+    let b = bigint & 255
     const p = Math.min(Math.max(percent, 0), 100) / 100
     r = Math.round(r * (1 - p)); g = Math.round(g * (1 - p)); b = Math.round(b * (1 - p))
     return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
   } catch { return '#167293' }
 }
 
+/* 🔁 Arista sin dirección: evita duplicar A→B y B→A */
 function ensureEdge(source, target, weight) {
-  const w = Number(weight);
-  const existing = cy.$(`edge[source="${source}"][target="${target}"]`);
+  const w = Number(weight)
+  const existing = cy.$(
+    `edge[source="${source}"][target="${target}"], edge[source="${target}"][target="${source}"]`
+  )
+
   if (existing.empty()) {
     cy.add({
       group: 'edges',
-      data: { id: `e_${source}_${target}_${Date.now()}`, source, target, weight: isNaN(w) ? 0 : w }
-    });
+      data: {
+        id: `e_${source}_${target}_${Date.now()}`,
+        source,
+        target,
+        weight: Number.isNaN(w) ? 0 : w
+      }
+    })
   } else {
-    existing.data('weight', isNaN(w) ? 0 : w);
+    existing.data('weight', Number.isNaN(w) ? 0 : w)
   }
 }
 
@@ -584,11 +658,35 @@ async function addTextAt(position) {
 /* =====================================================
    🟩 MODOS / ESTILO / EXPORTACIÓN
 ===================================================== */
-function toggleNodeMode() { nodeMode.value = !nodeMode.value; if (nodeMode.value) connectMode.value = deleteMode.value = moveMode.value = textMode.value = false; applyGrabRules() }
-function toggleDeleteMode() { deleteMode.value = !deleteMode.value; if (deleteMode.value) nodeMode.value = connectMode.value = moveMode.value = textMode.value = false; applyGrabRules() }
-function toggleConnectMode() { connectMode.value = !connectMode.value; if (connectMode.value) nodeMode.value = deleteMode.value = moveMode.value = textMode.value = false; else clearPendingConnect(); applyGrabRules() }
-function toggleMoveMode() { moveMode.value = !moveMode.value; if (moveMode.value) nodeMode.value = connectMode.value = deleteMode.value = textMode.value = false; applyGrabRules() }
-function toggleTextMode() { textMode.value = !textMode.value; if (textMode.value) nodeMode.value = connectMode.value = deleteMode.value = moveMode.value = false; applyGrabRules() }
+function toggleNodeMode() {
+  nodeMode.value = !nodeMode.value
+  if (nodeMode.value) connectMode.value = deleteMode.value = moveMode.value = textMode.value = false
+  applyGrabRules()
+}
+function toggleDeleteMode() {
+  deleteMode.value = !deleteMode.value
+  if (deleteMode.value) nodeMode.value = connectMode.value = moveMode.value = textMode.value = false
+  applyGrabRules()
+}
+function toggleConnectMode() {
+  connectMode.value = !connectMode.value
+  if (connectMode.value) {
+    nodeMode.value = deleteMode.value = moveMode.value = textMode.value = false
+  } else {
+    clearPendingConnect()
+  }
+  applyGrabRules()
+}
+function toggleMoveMode() {
+  moveMode.value = !moveMode.value
+  if (moveMode.value) nodeMode.value = connectMode.value = deleteMode.value = textMode.value = false
+  applyGrabRules()
+}
+function toggleTextMode() {
+  textMode.value = !textMode.value
+  if (textMode.value) nodeMode.value = connectMode.value = deleteMode.value = moveMode.value = false
+  applyGrabRules()
+}
 
 function applyGrabRules() {
   if (!cy) return
@@ -614,9 +712,19 @@ async function confirmClear(e) {
     clearStyles(cy)
     clearPendingConnect()
     nodeMode.value = connectMode.value = deleteMode.value = moveMode.value = textMode.value = false
+
+    // reset MST
+    lastMst.value = []
+    lastKruskalMode.value = 'asc'
+    lastTotal.value = null
+    mstMatrixMatches.value = []
+    mstTotal.value = null
+    mstHeatMode.value = 'min'
+
     applyGrabRules()
   }
 }
+
 /* =====================================================
    🎨 ESTILO PIZARRA Y EXPORTACIÓN / IMPORTACIÓN
 ===================================================== */
@@ -807,7 +915,6 @@ function composeVerticalCanvas(topCanvas, bottomCanvas, gap = 16) {
 function serializeGraph() {
   const nodes = cy.nodes().map(n => {
     let classes = n.classes()
-    // Solo guardamos las clases que nos interesan
     classes = classes.filter(
       c => c === 'highlight' || c === 'highlight-max' || c === 'text-block'
     )
@@ -836,7 +943,6 @@ function serializeGraph() {
     }
   })
 
-  // 🔹 MST = todas las aristas que tienen highlight o highlight-max
   const mstEdges = cy.edges('edge.highlight, edge.highlight-max').map(e => e.id())
   const hasMax = cy.edges('edge.highlight-max').length > 0
 
@@ -879,7 +985,6 @@ function loadFromSerializable(obj) {
   cy.startBatch()
   cy.elements().remove()
 
-  // 🎨 Restaurar configuración visual de la pizarra
   if (obj.board) {
     theme.value = obj.board.theme ?? theme.value
     color.value = obj.board.color ?? color.value
@@ -887,7 +992,6 @@ function loadFromSerializable(obj) {
     showGrid.value = obj.board.showGrid ?? showGrid.value
   }
 
-  // 🟢 Nodos
   nodes.forEach(n => {
     const position = n.position || n?.data?.position || { x: 0, y: 0 }
     const data = {
@@ -908,7 +1012,6 @@ function loadFromSerializable(obj) {
     cy.add({ group: 'nodes', data, position, classes })
   })
 
-  // 🟠 Aristas
   edges.forEach(e => {
     const data = {
       id: e.id ?? `e_${e.source}_${e.target}_${Date.now()}`,
@@ -927,13 +1030,11 @@ function loadFromSerializable(obj) {
 
   cy.endBatch()
 
-  // 🔄 Refrescar estilos y ajustar vista
   cy.style().update()
   cy.fit(undefined, 24)
   updateUidFromElements(nodes, edges)
   cy.nodes().forEach(n => resizeNodeToLabel(n))
 
-  // 🧩 Compatibilidad: si mstMode = 'desc' pero todo viene con highlight normal
   if (obj.meta?.mstMode === 'desc') {
     const anyMax = cy.$('.highlight-max').length
     const anyMin = cy.$('.highlight').length
@@ -949,7 +1050,6 @@ function loadFromSerializable(obj) {
     }
   }
 
-  // 🎨 Repaint fix: fuerza a que se vea bien el highlight min/max
   requestAnimationFrame(() => {
     const maxNodes = cy.$('node.highlight-max')
     const maxEdges = cy.$('edge.highlight-max')
@@ -957,7 +1057,6 @@ function loadFromSerializable(obj) {
     const minEdges = cy.$('edge.highlight')
 
     if (maxNodes.length || maxEdges.length || minNodes.length || minEdges.length) {
-      // Máximo (naranja)
       maxNodes.forEach(n => {
         n.style({
           'background-color': '#ff9a3d',
@@ -968,13 +1067,11 @@ function loadFromSerializable(obj) {
       maxEdges.forEach(e => {
         e.style({
           'line-color': '#ff9a3d',
-          'target-arrow-color': '#ff9a3d',
           'width': 3,
           'transition-property': 'none'
         })
       })
 
-      // Mínimo (celeste)
       minNodes.forEach(n => {
         n.style({
           'background-color': '#5eb4ff',
@@ -985,7 +1082,6 @@ function loadFromSerializable(obj) {
       minEdges.forEach(e => {
         e.style({
           'line-color': '#5eb4ff',
-          'target-arrow-color': '#5eb4ff',
           'width': 3,
           'transition-property': 'none'
         })
@@ -1017,7 +1113,6 @@ async function importJSON(ev) {
     })
     if (!isConfirmed) return
 
-    // 🧩 Usamos el loader genérico (igual que en Dijkstra)
     loadFromSerializable(obj)
 
     if (obj.meta?.mstEdges?.length) {
@@ -1102,7 +1197,6 @@ async function exportJSON(base) {
     ...swalColors
   })
 }
-  
 </script>
 
 <style scoped lang="scss">
@@ -1200,7 +1294,6 @@ $shadow: 0 10px 24px rgba(0,0,0,.25);
     linear-gradient(to bottom, rgba(0,0,0,.05) 1px, transparent 1px);
   background-size: 16px 16px;
 
-  /* FABs (botones flotantes) */
   .fab {
     position: absolute;
     right: 14px;
