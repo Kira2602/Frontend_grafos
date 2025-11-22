@@ -3,43 +3,52 @@
     <div class="jo-card">
       <center><h3>Kruskal</h3></center>
 
-      <!-- Lottie centrado -->
-      <div class="jo-lottie">
-        <iframe
-          class="jo-lottie-frame"
-          title="Kruskal animation"
-          src="https://lottie.host/embed/ea7b47c8-d5c3-47e9-8b73-bb0a6bb16821/tztYv3kGKy.lottie"
-          frameborder="0"
-          allowfullscreen
-        ></iframe>
-      </div>
-
       <p class="jo-sub">
         Selecciona qué tipo de árbol de expansión deseas generar.
       </p>
 
       <div class="jo-grid-2">
+        <!-- MÍNIMO -->
         <button
           class="jo-card-btn"
           :class="{ active: mode === 'min' }"
           @click="choose('min')"
         >
-          <div class="jo-ico"><i class="fa-solid fa-compress"></i></div>
-          <div class="jo-ttl">Árbol de Expansión Mínima</div>
+          <div class="jo-card-lottie">
+            <iframe
+              class="jo-card-lottie-frame"
+              title="Árbol mínimo"
+              src="https://lottie.host/embed/e9f13b40-49ab-4e18-970f-335670644c9f/GB1npz4bBg.lottie"
+              frameborder="0"
+              allowfullscreen
+            ></iframe>
+          </div>
+          <div class="jo-ttl">Minimizar</div>
           <div class="jo-txt">
-            Encuentra el conjunto de aristas con <b>peso total mínimo</b>.
+            Encuentra el conjunto de aristas con
+            <b>peso total mínimo</b>.
           </div>
         </button>
 
+        <!-- MÁXIMO -->
         <button
           class="jo-card-btn"
           :class="{ active: mode === 'max' }"
           @click="choose('max')"
         >
-          <div class="jo-ico"><i class="fa-solid fa-expand"></i></div>
-          <div class="jo-ttl">Árbol de Expansión Máxima</div>
+          <div class="jo-card-lottie">
+            <iframe
+              class="jo-card-lottie-frame"
+              title="Árbol máximo"
+              src="https://lottie.host/embed/6f7305c1-f0ed-45f0-bb5f-8b172a473abe/lvOBaxvlbO.lottie"
+              frameborder="0"
+              allowfullscreen
+            ></iframe>
+          </div>
+          <div class="jo-ttl">Maximizar</div>
           <div class="jo-txt">
-            Encuentra el conjunto de aristas con <b>peso total máximo</b>.
+            Encuentra el conjunto de aristas con
+            <b>peso total máximo</b>.
           </div>
         </button>
       </div>
@@ -47,8 +56,8 @@
       <div class="jo-info">
         <i class="fa-solid fa-circle-info"></i>
         <div>
-          <strong>Kruskal</strong> construye el árbol de expansión conectando los nodos
-          de menor o mayor costo posible sin formar ciclos.
+          <strong>Kruskal</strong> construye el árbol de expansión conectando los
+          nodos de menor o mayor costo posible sin formar ciclos.
           <br />
           Los pesos deben ser <strong>no negativos</strong>.
         </div>
@@ -85,15 +94,15 @@ watch(
   }
 )
 
-function close() {
+function close () {
   emit('update:modelValue', false)
 }
 
-function choose(m) {
+function choose (m) {
   mode.value = m
 }
 
-function confirm() {
+function confirm () {
   emit('confirm', { mode: mode.value })
   close()
 }
@@ -119,27 +128,17 @@ function confirm() {
   font-family: "Poppins", sans-serif;
 }
 
-/* Lottie centrado */
-.jo-lottie {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin: 6px 0 10px;
-}
-.jo-lottie-frame {
-  width: min(180px, 50vw);
-  height: min(180px, 50vw);
-  border: 0;
-  background: transparent;
-  border-radius: 12px;
-  pointer-events: none;
+h3 {
+  margin: 0;
+  margin-bottom: 6px;
 }
 
-/* Texto */
+/* Texto bajo el título */
 .jo-sub {
   opacity: 0.9;
   margin: 0.25rem 0 1rem;
   text-align: center;
+  color: #dbe9ff;
 }
 
 /* Botones de modo */
@@ -149,39 +148,68 @@ function confirm() {
   gap: 12px;
   margin-bottom: 1rem;
 }
+
 .jo-card-btn {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 8px;
-  text-align: left;
-  background: #567c8d;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  padding: 14px;
+  text-align: center;
+  background: #1f2733;
+  border: 1px solid rgba(154, 208, 245, 0.15);
+  border-radius: 16px;
+  padding: 14px 10px 16px;
   cursor: pointer;
-  transition: transform 0.06s, filter 0.2s, border-color 0.2s;
+  transition: transform 0.06s, filter 0.2s, border-color 0.2s,
+    box-shadow 0.2s, background 0.2s;
+  color: #f5fbff;
 }
+
 .jo-card-btn:hover {
-  filter: brightness(1.05);
-  border-color: rgba(255, 255, 255, 0.18);
+  filter: brightness(1.06);
+  border-color: rgba(154, 208, 245, 0.6);
 }
+
 .jo-card-btn:active {
   transform: translateY(1px);
 }
+
 .jo-card-btn.active {
+  background: #263446;
   border-color: #9ad0f5;
-  box-shadow: 0 0 0 2px rgba(86, 124, 141, 0.5);
+  box-shadow: 0 0 0 2px rgba(154, 208, 245, 0.45);
 }
-.jo-ico {
-  font-size: 22px;
-  line-height: 1;
+
+/* Lottie dentro de la tarjeta */
+.jo-card-lottie {
+  width: 100%;
+  display: flex;
+  justify-content: center;
 }
+
+.jo-card-lottie-frame {
+  width: 96px;
+  height: 96px;
+  border: 0;
+  background: transparent;
+  pointer-events: none;
+  border-radius: 14px;
+}
+
+/* Textos de la tarjeta */
 .jo-ttl {
   font-weight: 800;
+  color: #f8fbff;       /* blanco */
 }
+
 .jo-txt {
-  opacity: 0.9;
-  font-size: 0.95rem;
+  opacity: 0.95;
+  font-size: 0.92rem;
+  color: #c8e0ff;       /* celeste suave */
+}
+
+.jo-txt b {
+  color: #9ad0f5;       /* celeste más fuerte para resaltar */
 }
 
 /* Info box */
@@ -197,13 +225,13 @@ function confirm() {
   margin-bottom: 14px;
 }
 .jo-info i {
-  color: #567c8d;
+  color: #9ad0f5;
   font-size: 16px;
   flex-shrink: 0;
   margin-top: 2px;
 }
 .jo-info strong {
-  color: #fff;
+  color: #ffffff;
 }
 
 /* Acciones */

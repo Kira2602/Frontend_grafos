@@ -8,7 +8,7 @@
         <iframe
           class="jo-lottie-frame"
           title="Dijkstra animation"
-          src="https://lottie.host/embed/91467bcf-af97-480e-8055-1759ae827e17/4mMqNhOpx0.lottie"
+          src="https://lottie.host/embed/714f8a20-0b00-463f-b211-fa8b935d7b8e/mAsxPtx8zo.lottie"
           frameborder="0"
           allowfullscreen
         ></iframe>

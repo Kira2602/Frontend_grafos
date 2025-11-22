@@ -58,15 +58,16 @@
           <i class="fa-solid fa-palette"></i>
         </button>
 
-        <!-- FAB izquierda: Dijkstra -->
-        <button
-          class="fab fab-left fab-left-top"
-          title="Ejecutar Dijkstra"
-          type="button"
-          @click.stop="openDijkstraOptions"
-        >
-          <i class="fa-solid fa-route"></i>
-        </button>
+      <!-- FAB izquierda: Dijkstra -->
+          <button
+            class="fab fab-left fab-left-top"
+            title="Ejecutar Dijkstra"
+            type="button"
+            @click.stop="openDijkstraOptions"
+          >
+            <!-- 🔽 aquí cambiamos el icono -->
+            <i class="fa-solid fa-diagram-project"></i>
+          </button>
 
         <!-- FAB izquierda: Matriz -->
         <button class="fab fab-left" title="Matriz de adyacencia" type="button" @click.stop="openMatriz">

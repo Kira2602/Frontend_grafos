@@ -131,6 +131,12 @@
       :ext="fileExtForType"
       @confirm="onNameConfirm"
     />
+
+    <!-- Opciones Kruskal (min / max con Lottie) -->
+    <KruskalOptions
+      v-model="showKruskalOptions"
+      @confirm="onKruskalConfirm"
+    />
   </section>
 </template>
 
@@ -143,6 +149,7 @@ import NodeNamePopup from '@/components/NodeNamePopup.vue'
 import NodePropsPopup from '@/components/NodePropsPopup.vue'
 import MatrizPopup from '@/components/MatrizPopup.vue'
 import NombreArchivoPopup from '@/components/NombreArchivoPopup.vue'
+import KruskalOptions from '@/components/KruskalOptions.vue'
 
 import cytoscape from 'cytoscape'
 import Swal from 'sweetalert2'
@@ -170,24 +177,25 @@ const lastMst = ref([])              // [{u,v,w}, ...]
 const lastKruskalMode = ref('asc')   // 'asc' | 'desc'
 const lastTotal = ref(null)          // peso total
 
+/* Modal de opciones Kruskal (min / max) */
+const showKruskalOptions = ref(false)
+
 /* =====================================================
    🟩 EJECUCIÓN DEL ALGORITMO DE KRUSKAL
 ===================================================== */
-async function openKruskalOptions() {
-  const { value: mode } = await Swal.fire({
-    title: 'Ejecutar Kruskal',
-    input: 'select',
-    inputOptions: {
-      asc: 'Árbol de expansión mínimo',
-      desc: 'Árbol de expansión máximo'
-    },
-    inputPlaceholder: 'Selecciona el modo',
-    showCancelButton: true,
-    confirmButtonText: 'Ejecutar',
-    cancelButtonText: 'Cancelar',
-    ...swalColors
-  })
-  if (mode) await runKruskal(mode)
+function openKruskalOptions () {
+  // Abre el modal con los dos botones y las animaciones Lottie
+  showKruskalOptions.value = true
+}
+
+/**
+ * Recibe el modo desde KruskalOptions:
+ *  - mode === 'min'  -> árbol de expansión mínima  -> 'asc'
+ *  - mode === 'max'  -> árbol de expansión máxima  -> 'desc'
+ */
+async function onKruskalConfirm ({ mode }) {
+  const internalMode = mode === 'max' ? 'desc' : 'asc'
+  await runKruskal(internalMode)
 }
 
 async function runKruskal(mode = 'asc') {
@@ -1197,9 +1205,16 @@ async function exportJSON(base) {
     ...swalColors
   })
 }
+
+/* si ya tenías exportImagen() definida más abajo en tu archivo original, déjala tal cual */
+async function exportImagen(base) {
+  const pngBlob = await cyPngBlob()
+  downloadBlob(`${base}.png`, pngBlob)
+}
 </script>
 
 <style scoped lang="scss">
+/* (el mismo SCSS que ya tenías, no toqué nada) */
 $navbar-height: 72px;
 $wrap-max: 1200px;
 
