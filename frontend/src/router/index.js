@@ -8,6 +8,7 @@ import ArbolBinario from '@/views/ArbolBinario.vue'
 import NorWest from '@/views/NorWest.vue'
 import Dijkstra from '@/views/Dijkstra.vue'
 import Kruskal from '@/views/Kruskal.vue'
+import FuzzyLogic from '@/views/FuzzyLogic.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -56,6 +57,11 @@ const router = createRouter({
       path: '/kruskal',
       name: 'kruskal',
       component: Kruskal,
+    },
+    {
+      path: '/fuzzy-logic',
+      name: 'fuzzy-logic',
+      component: FuzzyLogic,
     },
   ],
 })
