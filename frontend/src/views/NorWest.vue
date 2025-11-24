@@ -315,7 +315,6 @@ import LoadExamplePopup from '@/components/LoadExamplePopup.vue'
 import {
   northWestCorner,
   validateCostMatrix,
-  validateSupplyDemand,
   calculateHeatmapIntensity,
   exportToCSV as exportCSVUtil,
   exportToJSON as exportJSONUtil
@@ -526,34 +525,79 @@ const solve = async () => {
     return
   }
 
-  // Validar oferta y demanda
-  const supplyDemandValidation = validateSupplyDemand(supply.value, demand.value)
-  if (!supplyDemandValidation.valid) {
-    Swal.fire({
-      icon: 'error',
-      title: 'Error en oferta/demanda',
-      text: supplyDemandValidation.error,
-      background: '#1e1e1e',
-      color: '#ffffff'
-    })
-    return
+  // Validar que oferta y demanda sean números válidos (sin verificar igualdad aún)
+  for (let i = 0; i < supply.value.length; i++) {
+    if (typeof supply.value[i] !== 'number' || isNaN(supply.value[i]) || supply.value[i] < 0) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Error en oferta',
+        text: `La oferta del origen ${i + 1} debe ser un número no negativo`,
+        background: '#1e1e1e',
+        color: '#ffffff'
+      })
+      return
+    }
   }
 
-  // Advertir si hay diferencia entre oferta y demanda
+  for (let j = 0; j < demand.value.length; j++) {
+    if (typeof demand.value[j] !== 'number' || isNaN(demand.value[j]) || demand.value[j] < 0) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Error en demanda',
+        text: `La demanda del destino ${j + 1} debe ser un número no negativo`,
+        background: '#1e1e1e',
+        color: '#ffffff'
+      })
+      return
+    }
+  }
+
+  // Balancear oferta y demanda si no son iguales
+  let balancedCosts = costs.value.map(row => [...row])
+  let balancedSupply = [...supply.value]
+  let balancedDemand = [...demand.value]
+  let balancedRows = rows.value
+  let balancedCols = cols.value
+  
   if (totalSupply.value !== totalDemand.value) {
-    Swal.fire({
-      icon: 'warning',
+    const diff = totalSupply.value - totalDemand.value
+    
+    const confirmResult = await Swal.fire({
+      icon: 'info',
       title: 'Oferta y demanda no equilibradas',
       html: `
-        <p>Oferta total: ${totalSupply.value}</p>
-        <p>Demanda total: ${totalDemand.value}</p>
-        <p>Diferencia: ${Math.abs(totalSupply.value - totalDemand.value)}</p>
-        <p>El problema debe estar equilibrado para resolverse.</p>
+        <p>Oferta total: <strong>${totalSupply.value}</strong></p>
+        <p>Demanda total: <strong>${totalDemand.value}</strong></p>
+        <p>Diferencia: <strong>${Math.abs(diff)}</strong></p>
+        <p>Se agregará ${diff > 0 ? 'una <strong>columna ficticia</strong> (destino)' : 'una <strong>fila ficticia</strong> (origen)'} con costos 0 para balancear el problema.</p>
       `,
+      showCancelButton: true,
+      confirmButtonText: 'Continuar',
+      cancelButtonText: 'Cancelar',
       background: '#1e1e1e',
       color: '#ffffff'
     })
-    return
+    
+    if (!confirmResult.isConfirmed) return
+    
+    if (diff > 0) {
+      // Oferta > Demanda: agregar columna ficticia
+      balancedCosts.forEach(row => row.push(0))
+      balancedDemand.push(diff)
+      balancedCols++
+    } else {
+      // Demanda > Oferta: agregar fila ficticia
+      balancedCosts.push(Array(balancedCols).fill(0))
+      balancedSupply.push(Math.abs(diff))
+      balancedRows++
+    }
+    
+    // Actualizar tabla visual
+    rows.value = balancedRows
+    cols.value = balancedCols
+    costs.value = balancedCosts.map(row => [...row])
+    supply.value = [...balancedSupply]
+    demand.value = [...balancedDemand]
   }
 
   try {
@@ -572,8 +616,13 @@ const solve = async () => {
     // Simular tiempo de procesamiento
     await new Promise((resolve) => setTimeout(resolve, 800))
 
-    // Resolver (nota: North West no usa el parámetro maximize, es solo una heurística básica)
-  result.value = northWestCorner(costs.value, supply.value, demand.value, { maximize: isMaximize.value })
+    // Resolver con datos balanceados (usar las copias balanceadas, no las referencias globales)
+    result.value = northWestCorner(
+      balancedCosts.map(row => [...row]), 
+      [...balancedSupply], 
+      [...balancedDemand], 
+      { maximize: isMaximize.value }
+    )
     currentIteration.value = 0
 
     Swal.fire({
@@ -641,15 +690,49 @@ const getIterationHeatmapStyle = (value) => {
   }
 }
 
+// Función auxiliar para solicitar nombre de archivo
+const promptFileName = async (defaultName, extension) => {
+  const result = await Swal.fire({
+    title: 'Nombre del archivo',
+    input: 'text',
+    inputLabel: `Ingrese el nombre para el archivo ${extension.toUpperCase()}`,
+    inputValue: defaultName,
+    inputPlaceholder: `nombre-archivo`,
+    showCancelButton: true,
+    confirmButtonText: 'Descargar',
+    cancelButtonText: 'Cancelar',
+    background: '#1e1e1e',
+    color: '#ffffff',
+    inputValidator: (value) => {
+      if (!value || value.trim() === '') {
+        return 'Debe ingresar un nombre válido'
+      }
+      // Eliminar caracteres no permitidos en nombres de archivo
+      const sanitized = value.replace(/[<>:"/\\|?*]/g, '')
+      if (sanitized !== value) {
+        return 'El nombre contiene caracteres no permitidos'
+      }
+    }
+  })
+  
+  if (result.isConfirmed && result.value) {
+    return result.value.trim()
+  }
+  return null
+}
+
 // Exportación
-const exportCSV = () => {
+const exportCSV = async () => {
   try {
+    const fileName = await promptFileName('northwest', 'csv')
+    if (!fileName) return
+    
     const csv = exportCSVUtil(costs.value, supply.value, demand.value)
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `northwest-${Date.now()}.csv`
+    link.download = `${fileName}.csv`
     link.click()
     URL.revokeObjectURL(url)
 
@@ -674,14 +757,17 @@ const exportCSV = () => {
   }
 }
 
-const exportJSON = () => {
+const exportJSON = async () => {
   try {
+    const fileName = await promptFileName('northwest', 'json')
+    if (!fileName) return
+    
     const json = exportJSONUtil(costs.value, supply.value, demand.value)
     const blob = new Blob([json], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `northwest-${Date.now()}.json`
+    link.download = `${fileName}.json`
     link.click()
     URL.revokeObjectURL(url)
 
@@ -708,6 +794,9 @@ const exportJSON = () => {
 
 const exportImage = async () => {
   try {
+    const fileName = await promptFileName('northwest-table', 'png')
+    if (!fileName) return
+    
     Swal.fire({
       title: 'Generando imagen...',
       allowOutsideClick: false,
@@ -728,7 +817,7 @@ const exportImage = async () => {
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `northwest-table-${Date.now()}.png`
+      link.download = `${fileName}.png`
       link.click()
       URL.revokeObjectURL(url)
 
