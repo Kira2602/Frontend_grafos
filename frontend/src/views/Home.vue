@@ -166,8 +166,51 @@ onMounted(() => {
                   <button class="button" @click="router.push({ name: 'arbol-binario' })">Iniciar</button>
                 </div>
               </div>
+              <!-- Card 5 -->
+              <div class="card swiper-slide">
+                <div class="image-content">
+                  <span class="overlay"></span>
+                  <div class="card-image">
+                    <!-- Asegúrate de colocar la imagen en /src/assets/img/alg_sorts.png -->
+                    <img
+                      src="../assets/img/alg_dijsktra.png"
+                      alt="Árboles Binarios"
+                      class="card-img"
+                      onerror="this.src='https://via.placeholder.com/220x130?text=Sorts';"
+                    />
+                  </div>
+                </div>
+                <div class="card-content">
+                  <h2 class="name">Álgoritmo de Dijsktra</h2>
+                  <p class="description">
+                    Permite construir grafos ponderados y aplicar Dijkstra en modo mínimo o máximo para hallar y resaltar el camino de costo óptimo entre dos nodos.
+                  </p>
+                  <button class="button" @click="router.push({ name: 'dijkstra' })">Iniciar</button>
+                </div>
+              </div>
 
-
+              <!-- Card 6 -->
+              <div class="card swiper-slide">
+                <div class="image-content">
+                  <span class="overlay"></span>
+                  <div class="card-image">
+                    <!-- Asegúrate de colocar la imagen en /src/assets/img/alg_sorts.png -->
+                    <img
+                      src="../assets/img/alg_kruskal.png"
+                      alt="Árboles Binarios"
+                      class="card-img"
+                      onerror="this.src='https://via.placeholder.com/220x130?text=Sorts';"
+                    />
+                  </div>
+                </div>
+                <div class="card-content">
+                  <h2 class="name">Álgoritmo de Kruskal</h2>
+                  <p class="description">
+                    Permite construir y visualizar grafos y ejecutar modo mínimo o máximo para obtener el árbol de expansión,  así como exportar e importar la pizarra en archivos JSON.
+                  </p>
+                  <button class="button" @click="router.push({ name: 'kruskal' })">Iniciar</button>
+                </div>
+              </div>
               </div>
           </div>
 

@@ -77,6 +77,25 @@
                   >
                     Árboles Binarios
                   </li>
+
+                  <li
+                    role="menuitem"
+                    tabindex="0"
+                    @click="goDijkstra"
+                    @keydown.enter="goDijkstra"
+                    aria-label="Ir a Dijkstra"
+                  >
+                    Dijkstra
+                  </li>
+                  <li
+                    role="menuitem"
+                    tabindex="0"
+                    @click="goKruskal"
+                    @keydown.enter="goKruskal"
+                    aria-label="Ir a Kruskal"
+                  >
+                    Kruskal
+                  </li>
                 </ul>
               </li>
 
@@ -171,6 +190,16 @@ const goArbolBinario = () => {
   router.push('/arbol-binario')
 }
 
+const goDijkstra = () => {
+  isOpen.value = false
+  router.push('/dijkstra')
+}
+
+const goKruskal = () => {
+  isOpen.value = false
+  router.push('/kruskal')
+}
+
 const openHelp = () => {
   isOpen.value = false
   isHelpOpen.value = true
@@ -242,8 +271,6 @@ const helpCfg = computed(() => {
     }
   }
 
-  // ✅ NUEVO BLOQUE PARA ÁRBOL BINARIO
-    // ✅ NUEVO BLOQUE PARA ÁRBOL BINARIO
   if (name === 'arbol-binario' || path === '/arbol-binario') {
     const videoId = 'XfpBkrlmyk4'
     const si = 'hDwM5E6qON9DJkcX'
@@ -253,6 +280,31 @@ const helpCfg = computed(() => {
       youtubeUrl: `https://youtu.be/${videoId}?si=${si}`,
       embedQuery: `si=${si}`,
       pdfUrl: '/assets/pdf/arboles_guide.pdf',
+    }
+  }
+
+  if (name === 'dijkstra' || path === '/dijkstra') {
+    return {
+      heading: 'Dijkstra: Tutorial',
+      youtubeUrl: 'https://www.youtube.com/embed/sxM0kXiBMhI?si=VPJ-uIe0TEc7di3I',
+      embedQuery: '',
+      videoId: '',
+      pdfUrl: '/assets/pdf/dijkstra_guide.pdf',
+    }
+  }
+
+  // 🔹 KRUSKAL con tu iframe (video sC2mH54vb9Q)
+  if (name === 'kruskal' || path === '/kruskal') {
+    const videoId = 'sC2mH54vb9Q'
+    const si = 'epPiFM_RIiixWBom'
+    return {
+      heading: 'Kruskal: Tutorial',
+      videoId,
+      // Link clickeable (YouTube normal)
+      youtubeUrl: `https://youtu.be/${videoId}?si=${si}`,
+      // Para el embed del iframe dentro del modal
+      embedQuery: `si=${si}`,
+      pdfUrl: '/assets/pdf/kruskal_guide.pdf',
     }
   }
 
