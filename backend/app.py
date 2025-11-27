@@ -1,10 +1,20 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import matlab.engine
 import threading
 import os
 from utils.fis_utils import parse_fis_content
 
 app = Flask(__name__)
+
+# Configurar CORS para permitir peticiones desde el frontend
+CORS(app, resources={
+    r"/*": {
+        "origins": ["http://localhost:5173", "http://localhost:5174", "http://localhost:3000"],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type"]
+    }
+})
 
 # --- CONFIGURACIÓN: FIS POR DEFECTO ---
 DEFAULT_FIS_CONTENT = """[System]
@@ -111,33 +121,38 @@ def launch_fuzzy():
     source_type = "default"
 
     try:
+        # Manejar POST con archivo
         if request.method == 'POST' and 'file' in request.files:
             file = request.files['file']
             if file.filename != '':
                 fis_content = file.read().decode('utf-8')
                 source_type = "uploaded_file"
-
-        if fis_content is None and request.is_json:
+        
+        # Manejar POST con JSON (solo si tiene contenido)
+        elif request.method == 'POST' and request.is_json and request.content_length:
             data = request.get_json()
             if 'fis_content' in data:
-                 fis_content = data['fis_content']
-                 source_type = "json_content"
+                fis_content = data['fis_content']
+                source_type = "json_content"
             elif 'fis_path' in data:
                 path = data['fis_path']
                 if os.path.exists(path):
-                    with open(path, 'r') as f: fis_content = f.read()
+                    with open(path, 'r') as f: 
+                        fis_content = f.read()
                     source_type = "local_path"
+        
+        # Manejar GET con parámetro de ruta
+        elif request.method == 'GET' and request.args.get("fis_path"):
+            path = request.args.get("fis_path")
+            if os.path.exists(path):
+                with open(path, 'r') as f: 
+                    fis_content = f.read()
+                source_type = "local_path_arg"
 
+        # Si no se proporcionó contenido, usar el predeterminado
         if fis_content is None:
-            if request.method == 'GET' and request.args.get("fis_path"):
-                 path = request.args.get("fis_path")
-                 if os.path.exists(path):
-                     with open(path, 'r') as f: fis_content = f.read()
-                     source_type = "local_path_arg"
-                 else:
-                     fis_content = DEFAULT_FIS_CONTENT
-            else:
-                fis_content = DEFAULT_FIS_CONTENT
+            fis_content = DEFAULT_FIS_CONTENT
+            source_type = "default"
 
     except Exception as e:
         return jsonify({"error": f"Error leyendo entrada: {str(e)}"}), 500

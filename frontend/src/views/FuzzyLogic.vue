@@ -262,15 +262,73 @@
         </section>
       </div>
     </div>
+
+    <!-- Success Notification -->
+    <transition name="notification-slide">
+      <div v-if="showSuccessNotification" class="success-notification">
+        <div class="notification-content">
+          <i class="fa-solid fa-check-circle"></i>
+          <p>{{ successMessage }}</p>
+        </div>
+        <button class="close-notification-btn" @click="closeNotification">
+          <i class="fa-solid fa-times"></i>
+        </button>
+      </div>
+    </transition>
+
+    <!-- Fuzzy Load Popup -->
+    <FuzzyLoadPopup 
+      v-if="showFuzzyPopup"
+      @close="closeFuzzyPopup"
+      @success="handleFuzzySuccess"
+    />
   </div>
 </template>
 
 <script setup>
+import { ref } from 'vue'
 import NavbarComponent from '@/components/NavbarComponent.vue'
+import FuzzyLoadPopup from '@/components/FuzzyLoadPopup.vue'
 
+// State
+const showFuzzyPopup = ref(false)
+const successMessage = ref('')
+const showSuccessNotification = ref(false)
+
+// Methods
 const launchMatlabExample = () => {
-  // Placeholder para la funcionalidad futura de MATLAB
-  alert('Funcionalidad de MATLAB Fuzzy Logic Designer en desarrollo.\n\nPróximamente podrás interactuar con ejemplos prácticos directamente desde aquí.')
+  showFuzzyPopup.value = true
+  successMessage.value = ''
+  showSuccessNotification.value = false
+}
+
+const closeFuzzyPopup = () => {
+  showFuzzyPopup.value = false
+}
+
+const handleFuzzySuccess = (result) => {
+  successMessage.value = `Sistema "${result.systemName}" cargado correctamente desde ${getSourceLabel(result.source)}`
+  showSuccessNotification.value = true
+  
+  // Ocultar notificación después de 5 segundos
+  setTimeout(() => {
+    showSuccessNotification.value = false
+  }, 5000)
+}
+
+const getSourceLabel = (source) => {
+  const labels = {
+    'default': 'ejemplo predeterminado',
+    'uploaded_file': 'archivo subido',
+    'json_content': 'contenido JSON',
+    'local_path': 'ruta local',
+    'local_path_arg': 'ruta local'
+  }
+  return labels[source] || source
+}
+
+const closeNotification = () => {
+  showSuccessNotification.value = false
 }
 </script>
 
@@ -756,6 +814,85 @@ $shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.15);
   .step-card {
     flex-direction: column;
     align-items: flex-start;
+  }
+}
+
+/* Success Notification */
+.success-notification {
+  position: fixed;
+  top: 90px;
+  right: 24px;
+  background: linear-gradient(135deg, rgba(76, 175, 80, 0.95) 0%, rgba(56, 142, 60, 0.95) 100%);
+  color: white;
+  padding: 16px 20px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(76, 175, 80, 0.4);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 10000;
+  max-width: 400px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+
+  .notification-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+
+    i {
+      font-size: 1.5rem;
+      flex-shrink: 0;
+    }
+
+    p {
+      margin: 0;
+      font-size: 0.95rem;
+      line-height: 1.4;
+    }
+  }
+
+  .close-notification-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    padding: 6px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+
+    i {
+      font-size: 1rem;
+    }
+  }
+}
+
+.notification-slide-enter-active, .notification-slide-leave-active {
+  transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.notification-slide-enter-from {
+  opacity: 0;
+  transform: translateX(100px);
+}
+
+.notification-slide-leave-to {
+  opacity: 0;
+  transform: translateX(100px);
+}
+
+@media (max-width: 640px) {
+  .success-notification {
+    right: 16px;
+    left: 16px;
+    max-width: none;
   }
 }
 </style>
