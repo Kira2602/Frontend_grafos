@@ -96,6 +96,15 @@
                   >
                     Kruskal
                   </li>
+                  <li
+                    role="menuitem"
+                    tabindex="0"
+                    @click="goFuzzyLogic"
+                    @keydown.enter="goFuzzyLogic"
+                    aria-label="Ir a Lógica Difusa"
+                  >
+                    Lógica Difusa
+                  </li>
                 </ul>
               </li>
 
@@ -198,6 +207,11 @@ const goDijkstra = () => {
 const goKruskal = () => {
   isOpen.value = false
   router.push('/kruskal')
+}
+
+const goFuzzyLogic = () => {
+  isOpen.value = false
+  router.push('/fuzzy-logic')
 }
 
 const openHelp = () => {
